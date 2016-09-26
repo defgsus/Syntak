@@ -48,15 +48,15 @@ public:
     int numNodesVisited() const { return p_visited; }
     const QString& text() const { return p_text; }
 
-    bool parseRule(ParsedNode* parent, int subIdx=-1);
-    bool parseRule_(ParsedNode* parent);
+    bool parseRule(ParsedNode* node, int subIdx=-1);
+    bool parseRule_(ParsedNode* node);
 
     const LexxedToken& curToken() const { return p_look; }
     bool forward();
     void setPos(size_t);
     void pushPos() { p_posStack.push_back(p_lookPos); }
     void popPos();
-
+    size_t lengthSince(size_t sourcePos) const;
 private:
     Rules p_rules;
     Tokens p_lexxer;
@@ -94,22 +94,29 @@ private:
 class ParsedNode
 {
 public:
-    ParsedNode() : p_parent(nullptr), p_rule(nullptr) { }
+    ParsedNode() : p_length(0), p_parent(nullptr), p_rule(nullptr) { }
+    ~ParsedNode();
 
     bool isValid() const { return p_rule; }
 
     const SourcePos& pos() const { return p_pos; }
+    int length() const { return p_length; }
     const Rule* rule() const { return p_rule; }
+    ParsedNode* parent() const { return p_parent; }
+    QString name() const { return rule() ? rule()->name() : QString(); }
 
     bool contains(ParsedNode* n) const;
     const std::vector<ParsedNode*>& children() const { return p_children; }
 
     QString toString() const;
+    QString toBracketString() const;
 
 private:
     friend class Parser;
     void p_add(ParsedNode*n);
+    void p_add(const std::vector<ParsedNode*>& n);
     SourcePos p_pos;
+    int p_length;
     ParsedNode* p_parent;
     std::vector<ParsedNode*> p_children;
     const Rule* p_rule;

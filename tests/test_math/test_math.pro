@@ -25,5 +25,6 @@ HEADERS += \
     ../../syntak/Tokens.h \
     ../../syntak/Rules.h \
     ../../syntak/Parser.h \
-    MathParser.h
+    MathParser.h \
+    SimpleMathParser.h
 

@@ -26,7 +26,9 @@ SOFTWARE.
 
 #include <QString>
 #include <QtTest>
+
 #include "MathParser.h"
+#include "SimpleMathParser.h"
 
 //using namespace Syntak;
 
@@ -68,13 +70,87 @@ class SyntakTestMath : public QObject
 public:
     SyntakTestMath() { }
 
+    static QString randomExpression(
+            int minRecurseLevel, int maxRecurseLevel);
+    static QString randomTerm(int recursionLevel);
+    static QString randomFactor(int recursionLevel);
+
 private slots:
 
-    void testBasics();
+    void testSimple();
+    void testBasic();
+    void testBigRandomExpressions();
 };
 
-void SyntakTestMath::testBasics()
+
+QString SyntakTestMath::randomExpression(
+        int minLevel, int maxLevel)
 {
+    return randomTerm(minLevel + (rand()%maxLevel));
+}
+
+QString SyntakTestMath::randomTerm(int recursionLevel)
+{
+    QString s = randomFactor(recursionLevel);
+    for (int i=0; i<rand()%5; ++i)
+    {
+        switch (rand()%4)
+        {
+            case 0: s += "+"; break;
+            case 1: s += "-"; break;
+            case 2: s += "*"; break;
+            case 3: s += "/"; break;
+        }
+        s += randomFactor(recursionLevel);
+    }
+    return s;
+}
+
+QString SyntakTestMath::randomFactor(int recursionLevel)
+{
+    if (recursionLevel < 1 || rand() % 10 == 0)
+        return QString("%1").arg(rand()%1000);
+    return "(" + randomTerm(rand()%recursionLevel) + ")";
+}
+
+
+
+
+
+void SyntakTestMath::testSimple()
+{
+#define SYNTAK__COMP(expr__) \
+    { p.parse(#expr__); \
+      int stack = p.takeLastInt(); \
+      PRINT(p.parser.numNodesVisited() << " nodes in " \
+            << p.parser.text() << " = " << stack); \
+      if (stack != (expr__)) p.print(); \
+      QCOMPARE(stack, (expr__)); }
+
+    SimpleMathParser p;
+    SYNTAK__COMP( 1 );
+    SYNTAK__COMP( 123 );
+    SYNTAK__COMP( 12345 );
+
+    SYNTAK__COMP( 1+2 );
+    SYNTAK__COMP( 1-2 );
+    SYNTAK__COMP( 2*3 );
+    SYNTAK__COMP( 6/3 );
+
+    SYNTAK__COMP( 1+2*3 );
+    SYNTAK__COMP( 1-6/3 );
+    SYNTAK__COMP( (1+2)*3 );
+    SYNTAK__COMP( 1+2+3+4+5+6+7*8*9 );
+    SYNTAK__COMP( ((((((1+2)*3+4)*5+6)*7+8*9+10)*11+12)*13+14)*15 );
+
+#undef SYNTAK__COMP
+#undef SYNTAK__COMP_VAR
+}
+
+
+void SyntakTestMath::testBasic()
+{
+    return;
 #define SYNTAK__COMP_VAR(var__, int__) \
     { if (!p.variables.contains(var__)) \
         { p.print(); PARSE_ERROR("variable '" << var__ << "' not found"); } \
@@ -93,23 +169,34 @@ void SyntakTestMath::testBasics()
     SYNTAK__COMP( 2*3 );
     SYNTAK__COMP( 6/3 );
 
-    SYNTAK__COMP( +1 );
-    SYNTAK__COMP( -1 );
-    SYNTAK__COMP( -1 + -2 );
-    SYNTAK__COMP( -(1) );
-    SYNTAK__COMP( -1+-2 );
-    SYNTAK__COMP( -1*-2 );
-
-    SYNTAK__COMP( -(-(1+-2)*-3) );
-
     SYNTAK__COMP( 1+2*3 );
     SYNTAK__COMP( 1-6/3 );
     SYNTAK__COMP( (1+2)*3 );
     SYNTAK__COMP( 1+2+3+4+5+6+7*8*9 );
     SYNTAK__COMP( ((((((1+2)*3+4)*5+6)*7+8*9+10)*11+12)*13+14)*15 );
 
+    SYNTAK__COMP( +1 );
+    SYNTAK__COMP( -1 );
+    SYNTAK__COMP( -1 + -2 );
+    SYNTAK__COMP( -1+-2 );
+    SYNTAK__COMP( -1*-2 );
+
+    //SYNTAK__COMP( -(1) );
+    //SYNTAK__COMP( -(-(1+-2)*-3) );
+
 }
 
+void SyntakTestMath::testBigRandomExpressions()
+{
+    SimpleMathParser p;
+    for (int i=0; i<1000; ++i)
+    {
+        p.parse( randomExpression(10, 50) );
+        PRINT(p.parser.numNodesVisited() << " nodes in '"
+              << p.parser.text().left(20) << "...' = " \
+              << p.takeLastInt());
+    }
+}
 
 QTEST_APPLESS_MAIN(SyntakTestMath)
 

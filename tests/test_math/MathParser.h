@@ -39,7 +39,8 @@ SOFTWARE.
 class MathParser
 {
 public:
-    MathParser() { init(); }
+    MathParser() : rootNode(0) { init(); }
+    ~MathParser() { delete rootNode; }
 
     struct Node
     {
@@ -50,6 +51,7 @@ public:
     };
 
     Parser parser;
+    ParsedNode* rootNode;
     QList<ParsedToken> emits;
     QList<Node> stack;
     QMap<QString, int> variables;
@@ -72,6 +74,8 @@ public:
             << Token("digit", QRegExp("[0-9]"))
                ;
 
+//#define DO_SIGNED
+
         Rules rules;
         rules.addTokens(lex);
         rules.createOr( "op1",          "plus" , "minus");
@@ -80,14 +84,18 @@ public:
         rules.createAnd("op2_factor",   "op2" , "factor");
         rules.createAnd("expr",         "term" , "[op1_term]*");
         rules.createAnd("term",         "factor" , "[op2_factor]*");
-        rules.createOr( "factor",       "int_val", "int_quoted_expr");
         rules.createAnd("quoted_expr",  "bopen" , "expr" , "bclose");
+#ifdef DO_SIGNED
+        rules.createOr( "factor",       "int_val", "int_quoted_expr");
         rules.createAnd("uint",         "digit" , "[digit]*");
         rules.createOr ("uint_val",     "uint", "ident");
         rules.createAnd("int_val",      "[op1]", "uint_val");
         rules.createAnd("int_quoted_expr",
                                         "[op1]", "quoted_expr");
-
+#else
+        rules.createOr( "factor",       "int_val", "quoted_expr");
+        rules.createAnd("int_val",      "digit" , "[digit]*");
+#endif
         rules.createAnd("program",      "s_statement", "[s_statement]*");
         rules.createAnd("s_statement",  "statement", "semicolon");
         rules.createOr ("statement",    "assignment" , "print_call");
@@ -118,18 +126,20 @@ public:
             stack << Node(v);
 #endif
         });
-        // int_expr in factor
+        // int_val in factor
         rules.connect("factor", 0, [=](const ParsedToken& t)
         {
             emits << t;
             stack << t;
         });
+#ifdef DO_SIGNED
         // int_quoted_expr in factor
         rules.connect("factor", 1, [=](const ParsedToken& t)
         {
             emits << t;
             stack << t;
         });
+#endif
         rules.connect("op1_term", [=](const ParsedToken& t)
         {
             emits << t;
@@ -166,7 +176,10 @@ public:
         stack.clear();
         variables.clear();
 
-        parser.parse(text);
+        delete rootNode;
+        rootNode = parser.parse(text);
+        PRINT(rootNode->toBracketString());
+        printNodes();
     }
 
     void print()
@@ -185,6 +198,15 @@ public:
         for (auto i = variables.begin(); i!=variables.end(); ++i)
             PRINT( QString("'%1' : %2").arg(i.key()).arg(i.value()) );
 #endif
+    }
+
+    void printNodes() { printNodes(rootNode); }
+    void printNodes(ParsedNode* node)
+    {
+        PRINT(node->toString() << "\t\""
+              << parser.text().mid(node->pos().pos(), 4) << "\"");
+        for (auto c : node->children())
+            printNodes(c);
     }
 
     int takeLastInt()
