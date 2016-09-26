@@ -92,6 +92,16 @@ void SyntakTestMath::testBasics()
     SYNTAK__COMP( 1-2 );
     SYNTAK__COMP( 2*3 );
     SYNTAK__COMP( 6/3 );
+
+    SYNTAK__COMP( +1 );
+    SYNTAK__COMP( -1 );
+    SYNTAK__COMP( -1 + -2 );
+    SYNTAK__COMP( -(1) );
+    SYNTAK__COMP( -1+-2 );
+    SYNTAK__COMP( -1*-2 );
+
+    SYNTAK__COMP( -(-(1+-2)*-3) );
+
     SYNTAK__COMP( 1+2*3 );
     SYNTAK__COMP( 1-6/3 );
     SYNTAK__COMP( (1+2)*3 );

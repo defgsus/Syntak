@@ -80,11 +80,13 @@ public:
         rules.createAnd("op2_factor",   "op2" , "factor");
         rules.createAnd("expr",         "term" , "[op1_term]*");
         rules.createAnd("term",         "factor" , "[op2_factor]*");
-        rules.createOr( "factor",       "int_expr");
+        rules.createOr( "factor",       "int_val", "int_quoted_expr");
         rules.createAnd("quoted_expr",  "bopen" , "expr" , "bclose");
         rules.createAnd("uint",         "digit" , "[digit]*");
-        rules.createOr ("uint_expr",    "uint", "ident", "quoted_expr");
-        rules.createAnd("int_expr",     "[op1]", "uint_expr");
+        rules.createOr ("uint_val",     "uint", "ident");
+        rules.createAnd("int_val",      "[op1]", "uint_val");
+        rules.createAnd("int_quoted_expr",
+                                        "[op1]", "quoted_expr");
 
         rules.createAnd("program",      "s_statement", "[s_statement]*");
         rules.createAnd("s_statement",  "statement", "semicolon");
@@ -100,6 +102,7 @@ public:
 
 #define DO_STACK
 
+        // ident name
         rules.connect("assignment", 0, [=](const ParsedToken& t)
         {
             emits << t;
@@ -115,14 +118,17 @@ public:
             stack << Node(v);
 #endif
         });
-        // int in factor
+        // int_expr in factor
         rules.connect("factor", 0, [=](const ParsedToken& t)
         {
             emits << t;
-#ifdef DO_STACK
-            if (!t.text().startsWith("("))
-                stack << t;
-#endif
+            stack << t;
+        });
+        // int_quoted_expr in factor
+        rules.connect("factor", 1, [=](const ParsedToken& t)
+        {
+            emits << t;
+            stack << t;
         });
         rules.connect("op1_term", [=](const ParsedToken& t)
         {
@@ -186,7 +192,7 @@ public:
         auto n = stack.takeLast();
         if (!n.t.isValid())
             return n.value;
-        if (n.t.rule()->name() == "int_expr")
+        if (n.t.rule()->name() == "int_val")
         {
             QString text = n.t.text();
             bool neg = text.startsWith("-");
@@ -198,7 +204,20 @@ public:
                 v = text.toInt();
             return neg ? -v : v;
         }
-        PARSE_ERROR("expected int_expr in stack, got "
+        if (n.t.rule()->name() == "int_quoted_expr")
+        {
+            QString text = n.t.text();
+            bool neg = text.startsWith("-");
+            text.remove("-").remove("+").remove("(").remove(")");
+            int v;
+            if (variables.contains(text))
+                v = variables[text];
+            else
+                v = text.toInt();
+            return neg ? -v : v;
+        }
+        print();
+        PARSE_ERROR("expected int in stack, got "
                     << n.t.rule()->name());
         return 0;
     }

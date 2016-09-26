@@ -31,7 +31,7 @@ SOFTWARE.
 #include "Rules.h"
 
 
-
+class ParsedNode;
 
 class Parser
 {
@@ -44,12 +44,12 @@ public:
     void setRules(const Rules& r) { p_rules = r; p_rules.check(); }
     void setLexxer(const Tokens& t) { p_lexxer = t; }
 
-    void parse(const QString& text);
+    ParsedNode* parse(const QString& text);
     int numNodesVisited() const { return p_visited; }
     const QString& text() const { return p_text; }
 
-    bool parseRule(const Rule* r, const Rule* parent=nullptr, int subIdx=-1);
-    bool parseRule_(const Rule* r);
+    bool parseRule(ParsedNode* parent, int subIdx=-1);
+    bool parseRule_(ParsedNode* parent);
 
     const LexxedToken& curToken() const { return p_look; }
     bool forward();
@@ -88,6 +88,30 @@ private:
     friend class Parser;
     SourcePos p_pos;
     QString p_text;
+    const Rule* p_rule;
+};
+
+class ParsedNode
+{
+public:
+    ParsedNode() : p_parent(nullptr), p_rule(nullptr) { }
+
+    bool isValid() const { return p_rule; }
+
+    const SourcePos& pos() const { return p_pos; }
+    const Rule* rule() const { return p_rule; }
+
+    bool contains(ParsedNode* n) const;
+    const std::vector<ParsedNode*>& children() const { return p_children; }
+
+    QString toString() const;
+
+private:
+    friend class Parser;
+    void p_add(ParsedNode*n);
+    SourcePos p_pos;
+    ParsedNode* p_parent;
+    std::vector<ParsedNode*> p_children;
     const Rule* p_rule;
 };
 

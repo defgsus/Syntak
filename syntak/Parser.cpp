@@ -26,6 +26,28 @@ SOFTWARE.
 
 #include "Parser.h"
 
+
+bool ParsedNode::contains(ParsedNode* node) const
+{
+    for (auto n : p_children)
+        if (n == node)
+            return true;
+    return false;
+}
+
+QString ParsedNode::toString() const
+{
+    if (!isValid())
+        return "INVALID";
+    return QString("%1@%2").arg(rule()->name()).arg(pos().toString());
+}
+
+void ParsedNode::p_add(ParsedNode *n)
+{
+    n->p_parent = this;
+    p_children.push_back(n);
+}
+
 Parser::Parser()
 {
 
@@ -42,7 +64,7 @@ namespace
         int* l;
     };
 
-#if 0
+#if 1
 #   define P_DEBUG(arg__) \
         { QString indent__ = p_level ? QString("%1").arg(p_level) \
                                  : QString(" "); \
@@ -80,7 +102,7 @@ void Parser::setPos(size_t p)
                                          : LexxedToken();
 }
 
-void Parser::parse(const QString &text)
+ParsedNode* Parser::parse(const QString &text)
 {
     p_tokens.clear();
     p_lookPos = 0;
@@ -90,35 +112,42 @@ void Parser::parse(const QString &text)
     p_lexxer.tokenize(p_text, p_tokens);
     setPos(0);
 
-    P_DEBUG("LEXXED: " p_lexxer.toString(p_tokens));
+    P_DEBUG("LEXXED: " << p_lexxer.toString(p_tokens));
 
 
     if (!p_rules.topRule())
         PARSE_ERROR("No top-level rule defined");
 
-    if (!parseRule(p_rules.topRule()))
+    auto node = new ParsedNode();
+    node->p_rule = p_rules.topRule();
+    if (!parseRule(node))
         PARSE_ERROR("No top statement found");
+    return node;
 }
 
-bool Parser::parseRule(const Rule* r, const Rule* parent, int subIdx)
+bool Parser::parseRule(ParsedNode* parent, int subIdx)
 {
     if (!curToken().isValid() || curToken().name() == "EOF")
         return false;
 
     LevelInc linc(&p_level);
-    P_DEBUG(r->toString() << " ("
+    P_DEBUG(parent->rule()->toString() << " ("
             << "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             << " " << subIdx
             );
     auto oldPos = curToken().pos();
-    bool ret = parseRule_(r);
-    P_DEBUG(") " << r->toString() << " =" << ret
+    bool ret = parseRule_(parent);
+    P_DEBUG(") " << parent->rule()->toString() << " =" << ret
             //<< "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             );
 
+    bool emitMain = ret && parent->rule()->p_func;
+    bool emitSub = ret && parent && subIdx >= 0
+            && subIdx < parent->rule()->subRules().size()
+            && parent->rule()->subRules()[subIdx].func;
+
     // emit subrules
-    if (ret && parent && subIdx >= 0 && subIdx < parent->subRules().size()
-        && parent->subRules()[subIdx].func)
+    if (emitSub)
     {
         int curPos = curToken().isValid() ? curToken().pos().pos()
                                           : p_text.size();
@@ -129,12 +158,13 @@ bool Parser::parseRule(const Rule* r, const Rule* parent, int subIdx)
         ParsedToken t;
         t.p_pos = oldPos;
         t.p_text = p_text.mid(oldPos.pos(), curPos - oldPos.pos());
-        t.p_rule = parent->subRules()[subIdx].rule;
-        parent->subRules()[subIdx].func(t);
+        t.p_rule = parent->rule()->subRules()[subIdx].rule;
+        P_DEBUG("EMIT " << t.toString());
+        parent->rule()->subRules()[subIdx].func(t);
     }
 
     // emit rule
-    if (ret && r->p_func)
+    if (emitMain)
     {
         int curPos = curToken().isValid() ? curToken().pos().pos()
                                           : p_text.size();
@@ -145,34 +175,52 @@ bool Parser::parseRule(const Rule* r, const Rule* parent, int subIdx)
         ParsedToken t;
         t.p_pos = oldPos;
         t.p_text = p_text.mid(oldPos.pos(), curPos - oldPos.pos());
-        t.p_rule = r;
-        r->p_func(t);
+        t.p_rule = parent->rule();
+        P_DEBUG("EMIT " << t.toString());
+        parent->rule()->p_func(t);
     }
     ++p_visited;
+
     return ret;
 }
 
-bool Parser::parseRule_(const Rule* r)
+bool Parser::parseRule_(ParsedNode* parent)
 {
-    switch (r->type())
+    auto node = new ParsedNode();
+    node->p_rule = parent->rule();
+    node->p_pos = curToken().pos();
+
+    switch (parent->rule()->type())
     {
         case Rule::T_TOKEN:
-            if (curToken().name() != r->name())
+        {
+            if (curToken().name() != parent->rule()->name())
+            {
+                delete node;
                 return false;
+            }
             forward();
+            parent->p_add(node);
             return true;
+        }
 
         case Rule::T_AND:
         {
             auto backup = p_lookPos;
-            for (int idx=0; idx<r->subRules().size(); ++idx)
+            for (int idx=0; idx<parent->rule()->subRules().size(); ++idx)
             {
-                const Rule::SubRule& sub = r->subRules()[idx];
+                const Rule::SubRule& sub = parent->rule()->subRules()[idx];
 
-                bool ret = parseRule(sub.rule, r, idx);
-                if (!sub.isOptional && ret == false)
+                auto subnode = new ParsedNode();
+                subnode->p_rule = sub.rule;
+                subnode->p_pos = curToken().pos();
+
+                bool ret = parseRule(subnode, idx);
+                if (!sub.isOptional && !ret)
                 {
                     setPos(backup);
+                    delete subnode;
+                    delete node;
                     return false;
                 }
 
@@ -181,15 +229,17 @@ bool Parser::parseRule_(const Rule* r)
                     auto pos = p_lookPos;
                     while (true)
                     {
-                        if (!parseRule(sub.rule, r, idx))
+                        if (!parseRule(subnode, idx))
                         {
                             setPos(pos);
                             break;
                         }
+                        node->p_add(subnode);
                         pos = p_lookPos;
                     }
                 }
             }
+            parent->p_add(node);
             return true;
         }
         break;
@@ -197,16 +247,26 @@ bool Parser::parseRule_(const Rule* r)
         case Rule::T_OR:
         {
             auto pos = p_lookPos;
-            for (int idx=0; idx<r->subRules().size(); ++idx)
+            for (int idx=0; idx<parent->rule()->subRules().size(); ++idx)
             {
-                const Rule::SubRule& sub = r->subRules()[idx];
+                const Rule::SubRule& sub = parent->rule()->subRules()[idx];
 
                 setPos(pos);
-                bool ret = parseRule(sub.rule, r, idx);
+
+                auto subnode = new ParsedNode();
+                subnode->p_rule = sub.rule;
+                subnode->p_pos = curToken().pos();
+
+                bool ret = parseRule(subnode, idx);
                 if (ret)
+                {
+                    node->p_add(subnode);
                     return true;
+                }
+                delete subnode;
             }
             setPos(pos);
+            delete node;
             return false;
         }
         break;
