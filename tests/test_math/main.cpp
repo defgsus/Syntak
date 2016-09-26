@@ -141,7 +141,7 @@ void SyntakTestMath::testSimple()
     SYNTAK__COMP( 1-6/3 );
     SYNTAK__COMP( (1+2)*3 );
     SYNTAK__COMP( 1+2+3+4+5+6+7*8*9 );
-    SYNTAK__COMP( ((((((1+2)*3+4)*5+6)*7+8*9+10)*11+12)*13+14)*15 );
+    SYNTAK__COMP( (((((((1+2)*3+4)*5+6)*7+8)*9+10)*11+12)*13+14)*15 );
 
 #undef SYNTAK__COMP
 #undef SYNTAK__COMP_VAR
@@ -150,7 +150,6 @@ void SyntakTestMath::testSimple()
 
 void SyntakTestMath::testBasic()
 {
-    return;
 #define SYNTAK__COMP_VAR(var__, int__) \
     { if (!p.variables.contains(var__)) \
         { p.print(); PARSE_ERROR("variable '" << var__ << "' not found"); } \
@@ -173,7 +172,7 @@ void SyntakTestMath::testBasic()
     SYNTAK__COMP( 1-6/3 );
     SYNTAK__COMP( (1+2)*3 );
     SYNTAK__COMP( 1+2+3+4+5+6+7*8*9 );
-    SYNTAK__COMP( ((((((1+2)*3+4)*5+6)*7+8*9+10)*11+12)*13+14)*15 );
+//    SYNTAK__COMP( (((((((1+2)*3+4)*5+6)*7+8)*9+10)*11+12)*13+14)*15 );
 
     SYNTAK__COMP( +1 );
     SYNTAK__COMP( -1 );

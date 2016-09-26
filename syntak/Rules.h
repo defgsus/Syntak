@@ -77,7 +77,7 @@ public:
     void connect(int idx, Callback f);
 
     const char* typeName() const {
-        return type() == T_TOKEN ? "TERM" : type() == T_OR ? "OR" : "AND"; }
+        return type() == T_TOKEN ? "term" : type() == T_OR ? "or" : "and"; }
 
     QString toString() const { return QString("%1(%2)").arg(name())
                                                        .arg(typeName()); }

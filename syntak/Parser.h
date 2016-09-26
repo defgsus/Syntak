@@ -107,6 +107,7 @@ public:
 
     bool contains(ParsedNode* n) const;
     const std::vector<ParsedNode*>& children() const { return p_children; }
+    int numChildLevels() const;
 
     QString toString() const;
     QString toBracketString() const;
@@ -116,7 +117,7 @@ private:
     void p_add(ParsedNode*n);
     void p_add(const std::vector<ParsedNode*>& n);
     SourcePos p_pos;
-    int p_length;
+    int p_length, p_nextTokenPos;
     ParsedNode* p_parent;
     std::vector<ParsedNode*> p_children;
     const Rule* p_rule;

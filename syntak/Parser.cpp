@@ -26,7 +26,7 @@ SOFTWARE.
 
 #include "Parser.h"
 
-#if 0
+#if 1
 #   define P_DEBUG(arg__) \
         { QString indent__ = p_level ? QString("%1").arg(p_level) \
                                  : QString(" "); \
@@ -49,6 +49,14 @@ bool ParsedNode::contains(ParsedNode* node) const
         if (n == node)
             return true;
     return false;
+}
+
+int ParsedNode::numChildLevels() const
+{
+    int m = 0;
+    for (auto c : children())
+        m = std::max(m, c->numChildLevels()+1);
+    return m;
 }
 
 QString ParsedNode::toString() const
@@ -313,18 +321,69 @@ bool Parser::parseRule_(ParsedNode* node)
                 bool ret = parseRule(subnode, idx);
                 if (ret)
                 {
-                    //subNodes.push_back(subnode);
                     subnode->p_length = lengthSince(pos);
-                    node->p_add(subnode);
-                    return true;
+                    subnode->p_nextTokenPos = p_lookPos;
+
+                    bool relevant = true;
+                    for (auto s : subNodes)
+                    if (subnode->length() < s->length()
+                     || subnode->numChildLevels() < s->numChildLevels()
+                            )
+                    {
+                        relevant = false;
+                        break;
+                    }
+                    if (!relevant)
+                    {
+                        P_DEBUG("discarding OR " << subnode->toString());
+                        delete subnode;
+                    }
+                    else
+                        subNodes.push_back(subnode);
                 }
                 else
                     delete subnode;
             }
-            setPos(pos);
+
+            if (subNodes.empty())
+            {
+                setPos(pos);
+                return false;
+            }
+
+            if (subNodes.size() == 1)
+            {
+                //P_DEBUG("one resulting OR node "
+                //        << subNodes.front()->toString());
+                node->p_add(subNodes.front());
+                setPos(subNodes.front()->p_nextTokenPos);
+                return true;
+            }
+
+            // find most "relevant"
+            ParsedNode* rel = 0;
+            int maxCh = -1, maxLen = -1;
             for (auto s : subNodes)
+            {
+                int len = s->length();
+                if (len > maxLen)
+                    rel = s, maxLen = len;
+                else
+                {
+                    int ch = s->numChildLevels();
+                    if (ch > maxCh)
+                        rel = s, maxCh = ch;
+                }
+            }
+            for (auto s : subNodes)
+            if (s != rel)
+            {
+                P_DEBUG("discarding OR " << s->toString());
                 delete s;
-            return false;
+            }
+            node->p_add(rel);
+            setPos(rel->p_nextTokenPos);
+            return true;
         }
         break;
     }

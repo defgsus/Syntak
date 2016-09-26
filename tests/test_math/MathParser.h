@@ -179,7 +179,7 @@ public:
         delete rootNode;
         rootNode = parser.parse(text);
         PRINT(rootNode->toBracketString());
-        printNodes();
+        //printNodes();
     }
 
     void print()
@@ -204,7 +204,8 @@ public:
     void printNodes(ParsedNode* node)
     {
         PRINT(node->toString() << "\t\""
-              << parser.text().mid(node->pos().pos(), 4) << "\"");
+              << parser.text().mid(node->pos().pos(),
+                                   node->length()) << "\"");
         for (auto c : node->children())
             printNodes(c);
     }
