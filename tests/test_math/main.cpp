@@ -172,17 +172,18 @@ void SyntakTestMath::testBasic()
     SYNTAK__COMP( 1-6/3 );
     SYNTAK__COMP( (1+2)*3 );
     SYNTAK__COMP( 1+2+3+4+5+6+7*8*9 );
-//    SYNTAK__COMP( (((((((1+2)*3+4)*5+6)*7+8)*9+10)*11+12)*13+14)*15 );
+    SYNTAK__COMP( (((((((1+2)*3+4)*5+6)*7+8)*9+10)*11+12)*13+14)*15 );
 
+    /*
     SYNTAK__COMP( +1 );
     SYNTAK__COMP( -1 );
     SYNTAK__COMP( -1 + -2 );
     SYNTAK__COMP( -1+-2 );
     SYNTAK__COMP( -1*-2 );
 
-    //SYNTAK__COMP( -(1) );
-    //SYNTAK__COMP( -(-(1+-2)*-3) );
-
+    SYNTAK__COMP( -(1) );
+    SYNTAK__COMP( -(-(1+-2)*-3) );
+    */
 }
 
 void SyntakTestMath::testBigRandomExpressions()

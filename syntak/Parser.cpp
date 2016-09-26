@@ -26,7 +26,7 @@ SOFTWARE.
 
 #include "Parser.h"
 
-#if 1
+#if 0
 #   define P_DEBUG(arg__) \
         { QString indent__ = p_level ? QString("%1").arg(p_level) \
                                  : QString(" "); \
@@ -63,7 +63,11 @@ QString ParsedNode::toString() const
 {
     if (!isValid())
         return "INVALID";
-    return QString("%1@%2").arg(rule()->name()).arg(pos().toString());
+    return QString("%1(pos=%2,len=%3,depth=%4)")
+            .arg(rule()->name())
+            .arg(pos().toString())
+            .arg(length())
+            .arg(numChildLevels());
 }
 
 QString ParsedNode::toBracketString() const
@@ -158,7 +162,8 @@ ParsedNode* Parser::parse(const QString &text)
     auto node = new ParsedNode();
     node->p_rule = p_rules.topRule();
     if (!parseRule(node))
-        PARSE_ERROR("No top-level statement in source");
+        PARSE_ERROR("No top-level statement in source '"
+                    << text << "'");
     node->p_length = lengthSince(0);
     return node;
 }
@@ -323,7 +328,7 @@ bool Parser::parseRule_(ParsedNode* node)
                 {
                     subnode->p_length = lengthSince(pos);
                     subnode->p_nextTokenPos = p_lookPos;
-
+                    /*
                     bool relevant = true;
                     for (auto s : subNodes)
                     if (subnode->length() < s->length()
@@ -338,7 +343,7 @@ bool Parser::parseRule_(ParsedNode* node)
                         P_DEBUG("discarding OR " << subnode->toString());
                         delete subnode;
                     }
-                    else
+                    else*/
                         subNodes.push_back(subnode);
                 }
                 else
@@ -365,6 +370,11 @@ bool Parser::parseRule_(ParsedNode* node)
             int maxCh = -1, maxLen = -1;
             for (auto s : subNodes)
             {
+                if (rel == nullptr)
+                {
+                    rel = s;
+                    break;
+                }
                 int len = s->length();
                 if (len > maxLen)
                     rel = s, maxLen = len;
@@ -381,6 +391,7 @@ bool Parser::parseRule_(ParsedNode* node)
                 P_DEBUG("discarding OR " << s->toString());
                 delete s;
             }
+            P_DEBUG("keeping OR " << rel->toString());
             node->p_add(rel);
             setPos(rel->p_nextTokenPos);
             return true;

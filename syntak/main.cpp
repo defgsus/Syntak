@@ -14,10 +14,11 @@ void simple()
 
     Rules rules;
     rules.addTokens(tok);
-    rules.createAnd("seq", "S", "[seq]*");
-    rules.createOr("S", "C", "D");
-    rules.createOr("C", "A", "B");
-    rules.createAnd("D", "A", "B");
+    rules.createAnd("seq", "S", "[S]*");
+    rules.createOr ("S", "C", "D");
+    rules.createAnd("C", "AorB");
+    rules.createAnd("D", "A");
+    rules.createOr ("AorB", "A", "B");
 
     Parser p;
     p.setLexxer(tok);
