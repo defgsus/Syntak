@@ -19,7 +19,8 @@ SOURCES += \
     Tokens.cpp \
     Rules.cpp \
     Parser.cpp \
-    main.cpp
+    main.cpp \
+    Parser_yabnf.cpp
 
 HEADERS += \
     Tokens.h \

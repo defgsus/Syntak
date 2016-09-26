@@ -29,6 +29,7 @@ SOFTWARE.
 
 #include <vector>
 #include <map>
+#include <memory>
 
 #include <QString>
 #include <QVariant>
@@ -41,6 +42,7 @@ SOFTWARE.
 
 class ParsedToken;
 
+/** A whole or piece of a production */
 class Rule
 {
     Rule() : p_isTop(false) { }
@@ -95,6 +97,7 @@ private:
 };
 
 
+/** A set of rules describing a grammar */
 class Rules
 {
 public:
@@ -152,7 +155,7 @@ private:
     void p_add(Rule*);
     void p_check();
     bool p_checked;
-    std::map<QString, Rule*> p_rules;
+    std::map<QString, std::shared_ptr<Rule>> p_rules;
     Rule* p_topRule;
     //std::vector<Rule*> p_rulesVec, p_rulesTerm;
 };

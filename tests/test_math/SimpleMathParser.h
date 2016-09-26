@@ -115,7 +115,7 @@ public:
 
         //PRINT(rules.toDefinitionString());
 
-        parser.setLexxer(lex);
+        parser.setTokens(lex);
         parser.setRules(rules);
 
     }

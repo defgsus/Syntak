@@ -33,6 +33,7 @@ SOFTWARE.
 #include <QString>
 #include <QRegExp>
 
+/** Position within a source text */
 class SourcePos
 {
 public:
@@ -40,12 +41,13 @@ public:
         : p_pos(pos), p_line(line) { }
     int pos() const { return p_pos; }
     int line() const { return p_line; }
-    void incLine() { ++p_line; }
     QString toString() const;
 private:
     int p_pos, p_line;
 };
 
+
+/** A matcher for a terminal symbol */
 class Token
 {
 public:
@@ -74,7 +76,7 @@ private:
 };
 
 
-
+/** A terminal symbol that was matched in the source text */
 class LexxedToken
 {
 public:
@@ -97,7 +99,7 @@ private:
 };
 
 
-
+/** Collection of terminal symbols */
 class Tokens
 {
 public:
@@ -114,10 +116,10 @@ public:
 
 
     template <class Container>
-    void tokenize(const QString& input, Container& output);
+    void tokenize(const QString& input, Container& output) const;
 
     template <class Container>
-    QString toString(const Container& vec);
+    static QString toString(const Container& vec);
 
     const std::vector<Token>& tokens() const { return p_tokens; }
 
@@ -128,7 +130,7 @@ private:
 
 
 template <class Container>
-void Tokens::tokenize(const QString& input, Container& output)
+void Tokens::tokenize(const QString& input, Container& output) const
 {
     int srcPos=0, srcLine=0;
     for (int i=0; i<input.size(); ++i, ++srcPos)
@@ -140,7 +142,7 @@ void Tokens::tokenize(const QString& input, Container& output)
             continue;
 
         int mp = -1;
-        Token* best = nullptr;
+        const Token* best = nullptr;
         QString value;
         for (auto& t : p_tokens)
         {
@@ -153,10 +155,18 @@ void Tokens::tokenize(const QString& input, Container& output)
             }
         }
         if (best)
+        {
             std::inserter(output, output.end())
                 = LexxedToken(best->name(), value,
                               SourcePos(srcPos, srcLine));
-
+            while (i+1 < mp && i+1 < input.size())
+            {
+                ++i;
+                ++srcPos;
+                if (input[i] == '\n')
+                    ++srcLine;
+            }
+        }
     }
 
     std::inserter(output, output.end())

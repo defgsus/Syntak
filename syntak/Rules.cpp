@@ -76,7 +76,7 @@ Rule* Rules::find(const QString &name)
         qWarning()<<"rule "<<name<<" not added";
         abort();
     }
-    return i->second;
+    return i->second.get();
 }
 
 QString Rule::toDefinitionString() const
@@ -131,7 +131,8 @@ Rule::SubRule Rules::makeSubRule(const QString& s)
 
 void Rules::p_add(Rule* r)
 {
-    p_rules.insert(std::make_pair(r->name(), r));
+    auto sp = std::shared_ptr<Rule>(r);
+    p_rules.insert(std::make_pair(r->name(), sp));
     p_checked = false;
 }
 
@@ -188,10 +189,10 @@ QString Rules::toDefinitionString() const
     QList<Rule*> ru;
     for (auto& i : p_rules)
         if (i.second->type() == Rule::T_TOKEN)
-            ru.append(i.second);
+            ru.append(i.second.get());
     for (auto& i : p_rules)
         if (i.second->type() != Rule::T_TOKEN)
-            ru.append(i.second);
+            ru.append(i.second.get());
 
     QString s;
     for (Rule* r : ru)
@@ -235,7 +236,7 @@ void Rules::p_check()
         }
         if (!contained)
         {
-            p_topRule = i.second;
+            p_topRule = i.second.get();
             i.second->p_isTop = true;
             //qDebug() << "toprule" << i.second->toString();
             break;

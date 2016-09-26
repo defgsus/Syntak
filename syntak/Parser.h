@@ -39,15 +39,17 @@ public:
     Parser();
 
     const Rules& rules() const { return p_rules; }
-    const Tokens& lexxer() const { return p_lexxer; }
+    Rules& rules() { return p_rules; }
+    const Tokens& tokens() const { return p_lexxer; }
 
     void setRules(const Rules& r) { p_rules = r; p_rules.check(); }
-    void setLexxer(const Tokens& t) { p_lexxer = t; }
+    void setTokens(const Tokens& t) { p_lexxer = t; }
 
     ParsedNode* parse(const QString& text);
     int numNodesVisited() const { return p_visited; }
     const QString& text() const { return p_text; }
-
+    const std::vector<LexxedToken>& lexxedTokens() const
+        { return p_tokens; }
     bool parseRule(ParsedNode* node, int subIdx=-1);
     bool parseRule_(ParsedNode* node);
 
@@ -57,6 +59,9 @@ public:
     void pushPos() { p_posStack.push_back(p_lookPos); }
     void popPos();
     size_t lengthSince(size_t sourcePos) const;
+
+    static Parser createYabnfParser();
+
 private:
     Rules p_rules;
     Tokens p_lexxer;

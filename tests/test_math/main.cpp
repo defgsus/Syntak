@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include <QString>
 #include <QtTest>
+#include <QTime>
 
 #include "MathParser.h"
 #include "SimpleMathParser.h"
@@ -188,14 +189,24 @@ void SyntakTestMath::testBasic()
 
 void SyntakTestMath::testBigRandomExpressions()
 {
-    SimpleMathParser p;
+    QStringList exps;
     for (int i=0; i<1000; ++i)
+        exps << randomExpression(10, 50);
+
+    SimpleMathParser p;
+    QTime time;
+    time.start();
+    size_t numNodes = 0;
+    for (auto& exp : exps)
     {
-        p.parse( randomExpression(10, 50) );
+        p.parse( exp );
+        numNodes += p.parser.numNodesVisited();
         PRINT(p.parser.numNodesVisited() << " nodes in '"
               << p.parser.text().left(20) << "...' = " \
               << p.takeLastInt());
     }
+    int e = time.elapsed();
+    PRINT(size_t(numNodes / (0.001*e)) << " per second");
 }
 
 QTEST_APPLESS_MAIN(SyntakTestMath)
