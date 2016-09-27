@@ -24,8 +24,8 @@ SOFTWARE.
 
 ****************************************************************************/
 
-#ifndef RULES_H
-#define RULES_H
+#ifndef SYNTAKSRC_SYNTAK_RULES_H
+#define SYNTAKSRC_SYNTAK_RULES_H
 
 #include <vector>
 #include <map>
@@ -40,7 +40,7 @@ SOFTWARE.
 #include <QDebug>
 #define PARSE_ERROR(arg__) { qDebug().noquote().nospace() << arg__; abort(); }
 
-class ParsedToken;
+class ParsedNode;
 
 /** A whole or piece of a production */
 class Rule
@@ -48,7 +48,7 @@ class Rule
     Rule() : p_isTop(false) { }
 
 public:
-    typedef std::function<void(const ParsedToken&)> Callback;
+    typedef std::function<void(ParsedNode*)> Callback;
 
     enum Type
     {
@@ -157,8 +157,7 @@ private:
     bool p_checked;
     std::map<QString, std::shared_ptr<Rule>> p_rules;
     Rule* p_topRule;
-    //std::vector<Rule*> p_rulesVec, p_rulesTerm;
 };
 
 
-#endif // RULES_H
+#endif // SYNTAKSRC_SYNTAK_RULES_H

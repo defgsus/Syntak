@@ -77,11 +77,11 @@ private:
 
 
 /** A terminal symbol that was matched in the source text */
-class LexxedToken
+class ParsedToken
 {
 public:
-    LexxedToken() { }
-    LexxedToken(const QString& name, const QString& value,
+    ParsedToken() { }
+    ParsedToken(const QString& name, const QString& value,
                 SourcePos pos)
         : p_name    (name)
         , p_value   (value)
@@ -94,6 +94,7 @@ public:
     const SourcePos& pos() const { return p_pos; }
 
 private:
+    friend class Parser;
     QString p_name, p_value;
     SourcePos p_pos;
 };
@@ -114,13 +115,6 @@ public:
     Tokens& operator << (const Token& t)
         { return add(t); }
 
-
-    template <class Container>
-    void tokenize(const QString& input, Container& output) const;
-
-    template <class Container>
-    static QString toString(const Container& vec);
-
     const std::vector<Token>& tokens() const { return p_tokens; }
 
 private:
@@ -129,59 +123,26 @@ private:
 
 
 
-template <class Container>
-void Tokens::tokenize(const QString& input, Container& output) const
+class Tokenizer
 {
-    int srcPos=0, srcLine=0;
-    for (int i=0; i<input.size(); ++i, ++srcPos)
-    {
-        if (input[i] == '\n')
-            ++srcLine;
+public:
+    Tokenizer() { }
+    Tokenizer(const Tokens& t) : p_tokens(t) { }
 
-        if (input[i].isSpace())
-            continue;
+    const std::vector<ParsedToken>& parsedTokens() const
+        { return p_parsedTokens; }
 
-        int mp = -1;
-        const Token* best = nullptr;
-        QString value;
-        for (auto& t : p_tokens)
-        {
-            int p = i;
-            if (t.isMatch(input, &p))
-            {
-                if (p > mp)
-                    mp = p, best = &t,
-                            value = input.mid(i, p-i);
-            }
-        }
-        if (best)
-        {
-            std::inserter(output, output.end())
-                = LexxedToken(best->name(), value,
-                              SourcePos(srcPos, srcLine));
-            while (i+1 < mp && i+1 < input.size())
-            {
-                ++i;
-                ++srcPos;
-                if (input[i] == '\n')
-                    ++srcLine;
-            }
-        }
-    }
+    void setTokens(const Tokens& t) { p_tokens = t; }
 
-    std::inserter(output, output.end())
-        = LexxedToken("EOF", "", SourcePos(srcPos, srcLine));
-}
+    void tokenize(const QString& input);
 
-template <class Container>
-QString Tokens::toString(const Container& vec)
-{
-    QString s;
-    for (const auto& t : vec)
-        s += QString("%1(%2)@%3 ")
-                .arg(t.name()).arg(t.value()).arg(t.pos().pos());
-    return s;
-}
+    QString toString() const;
+
+private:
+    Tokens p_tokens;
+    std::vector<ParsedToken> p_parsedTokens;
+};
+
 
 
 #endif // TOKENS_H

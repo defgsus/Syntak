@@ -26,7 +26,7 @@ SOFTWARE.
 
 #include "Parser.h"
 
-#if 0
+#if 1
 #   define P_DEBUG(arg__) \
         { QString indent__ = p_level ? QString("%1").arg(p_level) \
                                  : QString(" "); \
@@ -63,15 +63,26 @@ QString ParsedNode::toString() const
 {
     if (!isValid())
         return "INVALID";
-    return QString("%1(pos=%2,len=%3,depth=%4)")
+    return QString("%1(@%2-%3,d=%4)'%5'")
             .arg(rule()->name())
             .arg(pos().toString())
-            .arg(length())
-            .arg(numChildLevels());
+            .arg(pos().pos() + length())
+            .arg(numChildLevels())
+            .arg(text());
+}
+
+QString ParsedNode::text() const
+{
+    if (!isValid())
+        return QString("INVALID");
+    return p_parser->text().mid(pos().pos(), length());
 }
 
 QString ParsedNode::toBracketString() const
 {
+    if (!isValid())
+        return QString("INVALID");
+
     QString s = name();
     if (!children().empty())
     {
@@ -118,12 +129,12 @@ namespace
 
 bool Parser::forward()
 {
-    if (++p_lookPos >= p_tokens.size())
+    if (++p_lookPos >= p_lexer.parsedTokens().size())
     {
-        p_look = LexxedToken();
+        p_look = ParsedToken();
         return false;
     }
-    p_look = p_tokens[p_lookPos];
+    p_look = p_lexer.parsedTokens()[p_lookPos];
     return true;
 }
 
@@ -139,27 +150,28 @@ void Parser::popPos()
 void Parser::setPos(size_t p)
 {
     p_lookPos = p;
-    p_look = p_lookPos < p_tokens.size() ? p_tokens[p_lookPos]
-                                         : LexxedToken();
+    p_look = p_lookPos < p_lexer.parsedTokens().size()
+            ? p_lexer.parsedTokens()[p_lookPos]
+            : ParsedToken();
 }
 
 ParsedNode* Parser::parse(const QString &text)
 {
-    p_tokens.clear();
     p_lookPos = 0;
     p_level = 0;
     p_visited = 0;
     p_text = text;
-    p_lexxer.tokenize(p_text, p_tokens);
+    p_lexer.tokenize(p_text);
     setPos(0);
 
-    P_DEBUG("LEXXED: " << p_lexxer.toString(p_tokens));
+    P_DEBUG("LEXED: " << p_lexer.toString());
 
 
     if (!p_rules.topRule())
         PARSE_ERROR("No top-level rule defined");
 
     auto node = new ParsedNode();
+    node->p_parser = this;
     node->p_rule = p_rules.topRule();
     if (!parseRule(node))
         PARSE_ERROR("No top-level statement in source '"
@@ -190,11 +202,13 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
             << "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             << " " << subIdx
             );
-    auto oldPos = curToken().pos();
+    //auto oldPos = curToken().pos();
     bool ret = parseRule_(node);
     P_DEBUG(") " << node->rule()->toString() << " =" << ret
             //<< "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             );
+
+    //node->p_length = lengthSince(oldPos.pos());
 
     auto parent = node->parent();
     bool emitMain = ret && node->rule()->p_func;
@@ -205,27 +219,18 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
     // emit subrules
     if (emitSub)
     {
-        size_t len = lengthSince(oldPos.pos());
-
-        ParsedToken t;
-        t.p_pos = oldPos;
-        t.p_text = p_text.mid(oldPos.pos(), len);
-        t.p_rule = node->rule();
-        P_DEBUG("EMIT " << t.toString());
-        parent->rule()->subRules()[subIdx].func(t);
+        //size_t len =
+        P_DEBUG("EMIL " << node->toString());
+        parent->rule()->subRules()[subIdx].func(node);
     }
 
     // emit rule
     if (emitMain)
     {
-        size_t len = lengthSince(oldPos.pos());
+        //size_t len = lengthSince(oldPos.pos());
 
-        ParsedToken t;
-        t.p_pos = oldPos;
-        t.p_text = p_text.mid(oldPos.pos(), len);
-        t.p_rule = node->rule();
-        P_DEBUG("EMIT " << t.toString());
-        node->rule()->p_func(t);
+        P_DEBUG("EMIL " << node->toString());
+        node->rule()->p_func(node);
     }
     ++p_visited;
 
@@ -257,6 +262,7 @@ bool Parser::parseRule_(ParsedNode* node)
 
                 auto subnode = new ParsedNode();
                 subNodes.push_back(subnode);
+                subnode->p_parser = this;
                 subnode->p_rule = sub.rule;
                 subnode->p_pos = curToken().pos();
                 subnode->p_parent = node;
@@ -285,6 +291,7 @@ bool Parser::parseRule_(ParsedNode* node)
                         while (true)
                         {
                             auto subnode = new ParsedNode();
+                            subnode->p_parser = this;
                             subnode->p_rule = sub.rule;
                             subnode->p_pos = curToken().pos();
                             subnode->p_parent = node;
@@ -319,6 +326,7 @@ bool Parser::parseRule_(ParsedNode* node)
                 setPos(pos);
 
                 auto subnode = new ParsedNode();
+                subnode->p_parser = this;
                 subnode->p_rule = sub.rule;
                 subnode->p_pos = curToken().pos();
                 subnode->p_parent = node;

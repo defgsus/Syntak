@@ -40,20 +40,18 @@ public:
 
     const Rules& rules() const { return p_rules; }
     Rules& rules() { return p_rules; }
-    const Tokens& tokens() const { return p_lexxer; }
+    const Tokenizer& tokenizer() const { return p_lexer; }
 
     void setRules(const Rules& r) { p_rules = r; p_rules.check(); }
-    void setTokens(const Tokens& t) { p_lexxer = t; }
+    void setTokens(const Tokens& t) { p_lexer.setTokens(t); }
 
     ParsedNode* parse(const QString& text);
     int numNodesVisited() const { return p_visited; }
     const QString& text() const { return p_text; }
-    const std::vector<LexxedToken>& lexxedTokens() const
-        { return p_tokens; }
     bool parseRule(ParsedNode* node, int subIdx=-1);
     bool parseRule_(ParsedNode* node);
 
-    const LexxedToken& curToken() const { return p_look; }
+    const ParsedToken& curToken() const { return p_look; }
     bool forward();
     void setPos(size_t);
     void pushPos() { p_posStack.push_back(p_lookPos); }
@@ -64,15 +62,15 @@ public:
 
 private:
     Rules p_rules;
-    Tokens p_lexxer;
+    Tokenizer p_lexer;
     QString p_text;
-    std::vector<LexxedToken> p_tokens;
     std::vector<size_t> p_posStack;
-    LexxedToken p_look;
+    ParsedToken p_look;
     size_t p_lookPos;
     int p_level, p_visited;
 };
 
+/*
 class ParsedToken
 {
 public:
@@ -95,20 +93,26 @@ private:
     QString p_text;
     const Rule* p_rule;
 };
+*/
 
 class ParsedNode
 {
 public:
-    ParsedNode() : p_length(0), p_parent(nullptr), p_rule(nullptr) { }
+    ParsedNode()
+        : emitted(false),p_parser(nullptr), p_length(0)
+        , p_parent(nullptr), p_rule(nullptr) { }
+    bool emitted;
     ~ParsedNode();
 
-    bool isValid() const { return p_rule; }
+    bool isValid() const { return p_parser && p_rule; }
 
     const SourcePos& pos() const { return p_pos; }
     int length() const { return p_length; }
     const Rule* rule() const { return p_rule; }
     ParsedNode* parent() const { return p_parent; }
     QString name() const { return rule() ? rule()->name() : QString(); }
+    Parser* parser() const { return p_parser; }
+    QString text() const;
 
     bool contains(ParsedNode* n) const;
     const std::vector<ParsedNode*>& children() const { return p_children; }
@@ -121,6 +125,7 @@ private:
     friend class Parser;
     void p_add(ParsedNode*n);
     void p_add(const std::vector<ParsedNode*>& n);
+    Parser* p_parser;
     SourcePos p_pos;
     int p_length, p_nextTokenPos;
     ParsedNode* p_parent;

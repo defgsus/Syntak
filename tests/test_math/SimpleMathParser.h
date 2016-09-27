@@ -40,15 +40,15 @@ public:
 
     struct Node
     {
-        Node(const ParsedToken& t) : t(t) { }
-        Node(int v) : value(v) { }
-        ParsedToken t;
+        Node(ParsedNode* n) : node(n), value(0) { }
+        Node(int v) : node(nullptr), value(v) { }
+        ParsedNode* node;
         int value;
     };
 
     Parser parser;
     ParsedNode* rootNode;
-    QList<ParsedToken> emits;
+    QList<ParsedNode*> emits;
     QList<Node> stack;
     QMap<QString, int> variables;
 
@@ -84,29 +84,29 @@ public:
 #define DO_STACK
 
         // num in factor
-        rules.connect("factor", 0, [=](const ParsedToken& t)
+        rules.connect("factor", 0, [=](ParsedNode* n)
         {
-            emits << t;
-            stack << t;
+            emits << n;
+            stack << n;
         });
 
-        rules.connect("op1_term", [=](const ParsedToken& t)
+        rules.connect("op1_term", [=](ParsedNode* n)
         {
-            emits << t;
+            emits << n;
 #ifdef DO_STACK
             int p2 = takeLastInt(), p1 = takeLastInt();
-            if (t.text().startsWith("+"))
+            if (n->text().startsWith("+"))
                 stack << Node(p1 + p2);
             else
                 stack << Node(p1 - p2);
 #endif
         });
-        rules.connect("op2_factor", [=](const ParsedToken& t)
+        rules.connect("op2_factor", [=](ParsedNode* n)
         {
-            emits << t;
+            emits << n;
 #ifdef DO_STACK
             int p2 = takeLastInt(), p1 = takeLastInt();
-            if (t.text().startsWith("*"))
+            if (n->text().startsWith("*"))
                 stack << Node(p1 * p2);
             else
                 stack << Node(p2 != 0 ? (p1 / p2) : 0);
@@ -138,12 +138,14 @@ public:
         PRINT("Nodes visited: " << parser.numNodesVisited());
         PRINT("-- all emits --");
         for (auto& s : emits)
-            PRINT(s.toString());
+            PRINT(s->toString());
 #ifdef DO_STACK
+        /*
         PRINT("-- stack --");
         for (auto& s : stack)
             PRINT( (s.t.isValid() ? s.t.toString()
                                   : QString::number(s.value)) );
+                                  */
         PRINT("-- vars --");
         for (auto i = variables.begin(); i!=variables.end(); ++i)
             PRINT( QString("'%1' : %2").arg(i.key()).arg(i.value()) );
@@ -162,16 +164,16 @@ public:
 
     int takeLastInt()
     {
-        auto n = stack.takeLast();
-        if (!n.t.isValid())
+        const Node& n = stack.takeLast();
+        if (!n.node)
             return n.value;
-        if (n.t.rule()->name() == "num")
+        if (n.node->name() == "num")
         {
-            return n.t.text().toInt();
+            return n.node->text().toInt();
         }
         print();
         PARSE_ERROR("expected num in stack, got "
-                    << n.t.rule()->name());
+                    << n.node->name() );
         return 0;
     }
 };

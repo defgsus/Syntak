@@ -20,6 +20,9 @@ void simple()
     rules.createAnd("D", "A");
     rules.createOr ("AorB", "A", "B");
 
+    rules.connect("S", [=](ParsedNode* n)
+        { PRINT("--'"<<n->text()<<"' "<<n->toString()); });
+
     Parser p;
     p.setTokens(tok);
     p.setRules(rules);
@@ -35,14 +38,14 @@ void yabnf()
     Parser p = Parser::createYabnfParser();
     //PRINT(p.rules().toDefinitionString());
 
-    p.rules().connect("rule", [=](const ParsedToken& t)
+    p.rules().connect("rule", [=](ParsedNode* t)
     {
-        PRINT(t.toString());
+        PRINT(t->toString());
     });
 
-    p.rules().connect("factor", [=](const ParsedToken& t)
+    p.rules().connect("factor", [=](ParsedNode* t)
     {
-        PRINT(t.toString());
+        PRINT(t->toString());
     });
 
     QString s =
@@ -60,9 +63,6 @@ void yabnf()
 #endif
             ;
 
-    std::vector<LexxedToken> lt;
-    p.tokens().tokenize(s, lt);
-    PRINT(Tokens::toString(lt));
     auto node = p.parse(s);
     PRINT(node->toBracketString());
 }
@@ -70,8 +70,8 @@ void yabnf()
 
 int main(int, char**)
 {
-    //simple();
-    yabnf();
+    simple();
+    //yabnf();
     /*
     QString s = "aber das '%%hallo'";
     //QRegExp ident("[A-Za-z][A-Za-z0-9]*");

@@ -44,15 +44,15 @@ public:
 
     struct Node
     {
-        Node(const ParsedToken& t) : t(t) { }
-        Node(int v) : value(v) { }
-        ParsedToken t;
+        Node(ParsedNode* n) : node(n), value(0) { }
+        Node(int v) : node(nullptr), value(v) { }
+        ParsedNode* node;
         int value;
     };
 
     Parser parser;
     ParsedNode* rootNode;
-    QList<ParsedToken> emits;
+    QList<ParsedNode*> emits;
     QList<Node> stack;
     QMap<QString, int> variables;
 
@@ -102,7 +102,7 @@ public:
         rules.createAnd("assignment",   "ident", "equals", "expr");
         rules.createAnd("print_call",   "print", "bopen", "expr", "bclose");
         rules.createAnd("ident",        "letter" , "[alnum]*");
-        rules.createAnd("signed_ident", "[op1]" , "ident");
+        //rules.createAnd("signed_ident", "[op1]" , "ident");
         rules.createOr ("alnum",        "letter" , "digit");
 
 
@@ -111,58 +111,57 @@ public:
 #define DO_STACK
 
         // ident name
-        rules.connect("assignment", 0, [=](const ParsedToken& t)
+        rules.connect("assignment", 0, [=](ParsedNode* n)
         {
-            emits << t;
-            stack << t;
+            emits << n;
+            stack << n;
         });
-        rules.connect("assignment", [=](const ParsedToken& t)
+        rules.connect("assignment", [=](ParsedNode* n)
         {
-            emits << t;
+            emits << n;
 #ifdef DO_STACK
             int v = takeLastInt();
             auto p = stack.takeLast();
-            variables.insert(p.t.text(), v);
+            variables.insert(p.node->text(), v);
             stack << Node(v);
 #endif
         });
         // int_val in factor
-        rules.connect("factor", 0, [=](const ParsedToken& t)
+        rules.connect("factor", 0, [=](ParsedNode* n)
         {
-            emits << t;
-            stack << t;
+            emits << n;
+            stack << n;
         });
 #ifdef DO_SIGNED
         // int_quoted_expr in factor
-        rules.connect("factor", 1, [=](const ParsedToken& t)
+        rules.connect("factor", 1, [=](const ParsedNode* n)
         {
-            emits << t;
-            stack << t;
+            emits << n;
+            stack << n;
         });
 #endif
-        rules.connect("op1_term", [=](const ParsedToken& t)
+        rules.connect("op1_term", [=](ParsedNode* n)
         {
-            emits << t;
+            emits << n;
 #ifdef DO_STACK
             int p2 = takeLastInt(), p1 = takeLastInt();
-            if (t.text().startsWith("+"))
+            if (n->text().startsWith("+"))
                 stack << Node(p1 + p2);
             else
                 stack << Node(p1 - p2);
 #endif
         });
-        rules.connect("op2_factor", [=](const ParsedToken& t)
+        rules.connect("op2_factor", [=](ParsedNode* n)
         {
-            emits << t;
+            emits << n;
 #ifdef DO_STACK
             int p2 = takeLastInt(), p1 = takeLastInt();
-            if (t.text().startsWith("*"))
+            if (n->text().startsWith("*"))
                 stack << Node(p1 * p2);
             else
-                stack << Node(p1 / p2);
+                stack << Node(p2 != 0 ? (p1 / p2) : 0);
 #endif
         });
-
         //PRINT(rules.toDefinitionString());
 
         parser.setTokens(lex);
@@ -188,12 +187,13 @@ public:
         PRINT("Nodes visited: " << parser.numNodesVisited());
         PRINT("-- all emits --");
         for (auto& s : emits)
-            PRINT(s.toString());
+            PRINT(s->toString());
 #ifdef DO_STACK
         PRINT("-- stack --");
         for (auto& s : stack)
-            PRINT( (s.t.isValid() ? s.t.toString()
-                                  : QString::number(s.value)) );
+            PRINT( (s.node ? s.node->toString()
+                           : QString::number(s.value)) );
+
         PRINT("-- vars --");
         for (auto i = variables.begin(); i!=variables.end(); ++i)
             PRINT( QString("'%1' : %2").arg(i.key()).arg(i.value()) );
@@ -212,36 +212,56 @@ public:
 
     int takeLastInt()
     {
-        auto n = stack.takeLast();
-        if (!n.t.isValid())
+        const Node& n = stack.takeLast();
+        if (!n.node)
             return n.value;
-        if (n.t.rule()->name() == "int_val")
+
+        if (n.node->name() == "int_val")
         {
-            QString text = n.t.text();
+            QString text = n.node->text();
             bool neg = text.startsWith("-");
             text.remove("-").remove("+");
             int v;
             if (variables.contains(text))
                 v = variables[text];
             else
-                v = text.toInt();
+            {
+                bool ok;
+                v = text.toInt(&ok);
+                if (!ok)
+                {
+                    print();
+                    PARSE_ERROR("Failed to convert '" << text
+                                << "' to int");
+                }
+            }
             return neg ? -v : v;
         }
-        if (n.t.rule()->name() == "int_quoted_expr")
+        if (n.node->name() == "int_quoted_expr")
         {
-            QString text = n.t.text();
+            QString text = n.node->text();
             bool neg = text.startsWith("-");
             text.remove("-").remove("+").remove("(").remove(")");
             int v;
             if (variables.contains(text))
                 v = variables[text];
             else
-                v = text.toInt();
+            {
+                bool ok;
+                v = text.toInt(&ok);
+                if (!ok)
+                {
+                    print();
+                    PARSE_ERROR("Failed to convert '" << text
+                                << "' to int");
+                }
+            }
             return neg ? -v : v;
         }
+
         print();
         PARSE_ERROR("expected int in stack, got "
-                    << n.t.rule()->name());
+                    << n.node->name());
         return 0;
     }
 };

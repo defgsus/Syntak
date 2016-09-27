@@ -46,6 +46,8 @@ bool Token::isMatch(const QString& s, int* pos) const
             ++pt;
             ++ps;
         }
+        if (pt != p_fixed.length())
+            return false;
         *pos = ps;
         return true;
     }
@@ -60,3 +62,58 @@ bool Token::isMatch(const QString& s, int* pos) const
     }
 }
 
+
+
+void Tokenizer::tokenize(const QString& input)
+{
+    int srcPos=0, srcLine=0;
+    p_parsedTokens.clear();
+
+    for (int i=0; i<input.size(); ++i, ++srcPos)
+    {
+        if (input[i] == '\n')
+            ++srcLine;
+
+        if (input[i].isSpace())
+            continue;
+
+        int mp = -1;
+        const Token* best = nullptr;
+        QString value;
+        for (const Token& t : p_tokens.tokens())
+        {
+            int p = i;
+            if (t.isMatch(input, &p))
+            {
+                if (p > mp)
+                    mp = p, best = &t,
+                            value = input.mid(i, p-i);
+            }
+        }
+        if (best)
+        {
+            p_parsedTokens.push_back(
+                ParsedToken(best->name(), value,
+                            SourcePos(srcPos, srcLine)) );
+            while (i+1 < mp && i+1 < input.size())
+            {
+                ++i;
+                ++srcPos;
+                if (input[i] == '\n')
+                    ++srcLine;
+            }
+        }
+    }
+
+    p_parsedTokens.push_back(
+        ParsedToken("EOF", "", SourcePos(srcPos, srcLine)) );
+}
+
+QString Tokenizer::toString() const
+{
+    QString s;
+    for (const ParsedToken& t : p_parsedTokens)
+        s += QString("%1(%2)@%3 ")
+                .arg(t.name()).arg(t.value()).arg(t.pos().pos());
+    return s;
+}
