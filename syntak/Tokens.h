@@ -24,14 +24,16 @@ SOFTWARE.
 
 ****************************************************************************/
 
-#ifndef TOKENS_H
-#define TOKENS_H
+#ifndef SYNTAKSRC_SYNTAK_TOKENS_H
+#define SYNTAKSRC_SYNTAK_TOKENS_H
 
 #include <map>
 #include <set>
 
 #include <QString>
 #include <QRegExp>
+
+namespace Syntak {
 
 /** Position within a source text */
 class SourcePos
@@ -146,6 +148,6 @@ private:
     std::vector<ParsedToken> p_parsedTokens;
 };
 
+} // namespace Syntak
 
-
-#endif // TOKENS_H
+#endif // SYNTAKSRC_SYNTAK_TOKENS_H

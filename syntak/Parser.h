@@ -24,12 +24,13 @@ SOFTWARE.
 
 ****************************************************************************/
 
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef SYNTAKSRC_SYNTAK_PARSER_H
+#define SYNTAKSRC_SYNTAK_PARSER_H
 
 #include "Tokens.h"
 #include "Rules.h"
 
+namespace Syntak {
 
 class ParsedNode;
 
@@ -55,8 +56,12 @@ public:
 
     // ---- parsing ----
 
+    /** Returns the complete parse tree for the given text */
     ParsedNode* parse(const QString& text);
 
+    /** Reduces the parse tree in @p root to a syntax tree,
+        e.g. it reduces each node to the deepest leave node
+        if possible. */
     ParsedNode* reduceTree(const ParsedNode* root);
 
     static Parser createYabnfParser();
@@ -72,13 +77,18 @@ class ParsedNode
 {
 public:
     ParsedNode()
-        : p_parser(nullptr), p_isEmitted(false), p_length(0)
-        , p_parent(nullptr), p_rule(nullptr) { }
+        : p_parser(nullptr)
+        , p_rule(nullptr)
+        , p_isEmitted(false)
+        , p_length(0)
+        , p_parent(nullptr) { }
 
     ~ParsedNode();
 
     bool isValid() const { return p_parser && p_rule; }
     bool isEmitted() const { return p_isEmitted; }
+    bool isLeave() const { return p_children.empty(); }
+    bool isRoot() const { return p_parent == nullptr; }
 
     const SourcePos& pos() const { return p_pos; }
     int length() const { return p_length; }
@@ -88,24 +98,27 @@ public:
     Parser* parser() const { return p_parser; }
     QString text() const;
 
-    bool contains(ParsedNode* n) const;
+    bool contains(const ParsedNode* n) const;
     const std::vector<ParsedNode*>& children() const { return p_children; }
     int numChildLevels() const;
 
     QString toString() const;
-    QString toBracketString(bool withLineBeaks = false) const;
+    QString toBracketString(bool withContent=false,
+                            bool withLineBeaks = false) const;
 
 private:
     friend class Parser;
     void p_add(ParsedNode*n);
     void p_add(const std::vector<ParsedNode*>& n);
     Parser* p_parser;
+    const Rule* p_rule;
     SourcePos p_pos;
     bool p_isEmitted;
     int p_length, p_nextTokenPos;
     ParsedNode* p_parent;
     std::vector<ParsedNode*> p_children;
-    const Rule* p_rule;
 };
 
-#endif // PARSER_H
+} // namespace Syntak
+
+#endif // SYNTAKSRC_SYNTAK_PARSER_H

@@ -26,6 +26,8 @@ SOFTWARE.
 
 #include "Parser.h"
 
+namespace Syntak {
+
 /**
 http://cui.unige.ch/db-research/Enseignement/analyseinfo/AboutBNF.html
 
@@ -92,3 +94,5 @@ Parser Parser::createYabnfParser()
 
     return p;
 }
+
+} // namespace Syntak

@@ -24,11 +24,11 @@ SOFTWARE.
 
 ****************************************************************************/
 
-
-#include <QDebug>
-
 #include "Rules.h"
 #include "Tokens.h"
+#include "error.h"
+
+namespace Syntak {
 
 bool Rule::contains(const QString& n) const
 {
@@ -71,12 +71,7 @@ void Rule::connect(int idx, Callback f)
 Rule* Rules::find(const QString &name)
 {
     auto i = p_rules.find(name);
-    if (i == p_rules.end())
-    {
-        qWarning()<<"rule "<<name<<" not added";
-        abort();
-    }
-    return i->second.get();
+    return (i == p_rules.end()) ? nullptr : i->second.get();
 }
 
 QString Rule::toDefinitionString() const
@@ -176,12 +171,16 @@ void Rules::connect(const QString &name, Rule::Callback f)
 {
     if (auto r = find(name))
         r->connect(f);
+    else
+        SYNTAK_ERROR("Attempt to connect to unknown rule " << name);
 }
 
 void Rules::connect(const QString &name, int idx, Rule::Callback f)
 {
     if (auto r = find(name))
         r->connect(idx, f);
+    else
+        SYNTAK_ERROR("Attempt to connect to unknown rule " << name);
 }
 
 QString Rules::toDefinitionString() const
@@ -215,7 +214,7 @@ void Rules::p_check()
         {
             sub.rule = find(sub.name);
             if (!sub.rule)
-                PARSE_ERROR("Subrule "<<sub.name<<" in "<<i.second->name()
+                SYNTAK_ERROR("Subrule "<<sub.name<<" in "<<i.second->name()
                             <<" not known");
         }
     }
@@ -245,3 +244,5 @@ void Rules::p_check()
 
     p_checked = true;
 }
+
+} // namespace Syntak

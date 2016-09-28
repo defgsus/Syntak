@@ -25,6 +25,7 @@ SOFTWARE.
 ****************************************************************************/
 
 #include "Parser.h"
+#include "error.h"
 
 #if 0
 #   define P_DEBUG(arg__) \
@@ -36,6 +37,7 @@ SOFTWARE.
 #   define P_DEBUG(unused__) { }
 #endif
 
+namespace Syntak {
 
 ParsedNode::~ParsedNode()
 {
@@ -43,7 +45,7 @@ ParsedNode::~ParsedNode()
         delete n;
 }
 
-bool ParsedNode::contains(ParsedNode* node) const
+bool ParsedNode::contains(const ParsedNode* node) const
 {
     for (auto n : p_children)
         if (n == node)
@@ -81,7 +83,7 @@ QString ParsedNode::text() const
 namespace {
 
 QString toBracketStringWithLineBreaks(
-        const ParsedNode* n, const QString& indent)
+        const ParsedNode* n, const QString& indent, bool withContent)
 {
     if (!n->isValid())
         return QString("*INVALID*");
@@ -91,16 +93,20 @@ QString toBracketStringWithLineBreaks(
     {
         s += " {\n";
         for (auto c : n->children())
-            s += toBracketStringWithLineBreaks(c, indent + " ");
+            s += toBracketStringWithLineBreaks(
+                        c, indent + " ", withContent);
         s += indent + "}";
     }
+    else if (withContent)
+        s += " \"" + n->text() + "\"";
     s += "\n";
     return s;
 }
 
 } // namespace
 
-QString ParsedNode::toBracketString(bool lineBreaks) const
+QString ParsedNode::toBracketString(
+        bool withContent, bool lineBreaks) const
 {
     if (!isValid())
         return QString("*INVALID*");
@@ -115,10 +121,12 @@ QString ParsedNode::toBracketString(bool lineBreaks) const
                 s += " " + c->toBracketString();
             s += " }";
         }
+        else if (withContent)
+            s += " \"" + text() + "\"";
         return s;
     }
     else
-        return toBracketStringWithLineBreaks(this, "");
+        return toBracketStringWithLineBreaks(this, "", withContent);
 }
 
 void ParsedNode::p_add(ParsedNode *n)
@@ -142,7 +150,7 @@ namespace
     {
     public:
         LevelInc(int* lev) : l(lev)
-            { ++(*l); if (*l>1000) { PARSE_ERROR("TOO NESTED"); } }
+            { ++(*l); if (*l>1000) { SYNTAK_ERROR("TOO NESTED"); } }
         ~LevelInc() { --(*l); }
         int* l;
     };
@@ -169,6 +177,8 @@ struct Parser::Private
     bool forward();
     void setPos(size_t);
     size_t lengthSince(size_t sourcePos) const;
+
+    const ParsedNode* findLeaveNode(const ParsedNode* n);
 
     Parser* p;
     Rules p_rules;
@@ -245,13 +255,13 @@ ParsedNode* Parser::Private::parse(const QString &text)
     P_DEBUG("LEXED: " << p_lexer.toString());
 
     if (!p_rules.topRule())
-        PARSE_ERROR("No top-level rule defined");
+        SYNTAK_ERROR("No top-level rule defined");
 
     auto node = new ParsedNode();
     node->p_parser = p;
     node->p_rule = p_rules.topRule();
     if (!parseRule(node))
-        PARSE_ERROR("No top-level statement in source '"
+        SYNTAK_ERROR("No top-level statement in source '"
                     << text << "'");
     node->p_length = lengthSince(0);
     return node;
@@ -488,10 +498,29 @@ bool Parser::Private::parseRuleImpl(ParsedNode* node)
 }
 
 
-
-ParsedNode* Parser::reduceTree(const ParsedNode* root)
+const ParsedNode* Parser::Private::findLeaveNode(const ParsedNode* n)
 {
-    (void)root;
-    return nullptr;
+    if (n->isLeave() || n->children().size() > 1)
+        return n;
+    return findLeaveNode(n->children()[0]);
 }
 
+ParsedNode* Parser::reduceTree(const ParsedNode* n)
+{
+    auto newParent = new ParsedNode(*n);
+    newParent->p_children.clear();
+
+    for (auto c : n->children())
+    {
+        ParsedNode* newNode;
+        auto l = p_->findLeaveNode(c);
+        if (l != c)
+            newNode = reduceTree(l);
+        else
+            newNode = reduceTree(c);
+        newParent->p_add(newNode);
+    }
+    return newParent;
+}
+
+} // namespace Syntak

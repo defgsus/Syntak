@@ -32,13 +32,11 @@ SOFTWARE.
 #include <memory>
 
 #include <QString>
-#include <QVariant>
-#include <QDebug>
+#include <QList>
 
 #include "Tokens.h"
 
-#include <QDebug>
-#define PARSE_ERROR(arg__) { qDebug().noquote().nospace() << arg__; abort(); }
+namespace Syntak {
 
 class ParsedNode;
 
@@ -159,5 +157,6 @@ private:
     Rule* p_topRule;
 };
 
+} // namespace Syntak
 
 #endif // SYNTAKSRC_SYNTAK_RULES_H

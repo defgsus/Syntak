@@ -25,5 +25,6 @@ SOURCES += \
 HEADERS += \
     Tokens.h \
     Rules.h \
-    Parser.h
+    Parser.h \
+    error.h
 

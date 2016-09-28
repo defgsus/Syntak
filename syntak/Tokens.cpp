@@ -24,9 +24,9 @@ SOFTWARE.
 
 ****************************************************************************/
 
-#include <QDebug>
-
 #include "Tokens.h"
+
+namespace Syntak {
 
 QString SourcePos::toString() const
 {
@@ -117,3 +117,5 @@ QString Tokenizer::toString() const
                 .arg(t.name()).arg(t.value()).arg(t.pos().pos());
     return s;
 }
+
+} // namespace Syntak

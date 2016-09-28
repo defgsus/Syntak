@@ -8,6 +8,8 @@
 
 void simple()
 {
+    using namespace Syntak;
+
     Tokens tok;
     tok << Token("A", "A")
         << Token("B", "B");
@@ -35,6 +37,8 @@ void simple()
 
 void yabnf()
 {
+    using namespace Syntak;
+
     Parser p = Parser::createYabnfParser();
     //PRINT(p.rules().toDefinitionString());
 
@@ -49,7 +53,7 @@ void yabnf()
     });
 
     QString s =
-#if 0
+#if 1
     "expr : term [('+' | '-') term]*; "
     "term : factor [('*' | '/') factor]*; "
     "factor : '(' expr ')' | num; "
@@ -57,21 +61,21 @@ void yabnf()
     "digit : '1' | '2' | '3' | '4' | '5' | '6' | '7' | "
             "'8' | '9' | '0';"
 #else
-    //"factor : '(' expr ')'; "
+    "factor : '(' expr ')'; "
     "num : digit [digit]*; "
     "digit : '1' | '2' | '3';"
 #endif
             ;
 
     auto node = p.parse(s);
-    PRINT(node->toBracketString());
+    PRINT(p.reduceTree(node)->toBracketString(true, true));
 }
 
 
 int main(int, char**)
 {
-    simple();
-    //yabnf();
+    //simple();
+    yabnf();
     /*
     QString s = "aber das '%%hallo'";
     //QRegExp ident("[A-Za-z][A-Za-z0-9]*");

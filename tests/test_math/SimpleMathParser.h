@@ -32,6 +32,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
     #endif
 #endif
 
+using namespace Syntak;
+
+template <class INT>
 class SimpleMathParser
 {
 public:
@@ -41,16 +44,16 @@ public:
     struct Node
     {
         Node(ParsedNode* n) : node(n), value(0) { }
-        Node(int v) : node(nullptr), value(v) { }
+        Node(INT v) : node(nullptr), value(v) { }
         ParsedNode* node;
-        int value;
+        INT value;
     };
 
     Parser parser;
     ParsedNode* rootNode;
     QList<ParsedNode*> emits;
     QList<Node> stack;
-    QMap<QString, int> variables;
+    QMap<QString, INT> variables;
 
     void init()
     {
@@ -140,12 +143,10 @@ public:
         for (auto& s : emits)
             PRINT(s->toString());
 #ifdef DO_STACK
-        /*
         PRINT("-- stack --");
         for (auto& s : stack)
-            PRINT( (s.t.isValid() ? s.t.toString()
+            PRINT( (s.node->isValid() ? s.node->toString()
                                   : QString::number(s.value)) );
-                                  */
         PRINT("-- vars --");
         for (auto i = variables.begin(); i!=variables.end(); ++i)
             PRINT( QString("'%1' : %2").arg(i.key()).arg(i.value()) );
@@ -162,17 +163,17 @@ public:
             printNodes(c);
     }
 
-    int takeLastInt()
+    INT takeLastInt()
     {
         const Node& n = stack.takeLast();
         if (!n.node)
             return n.value;
         if (n.node->name() == "num")
         {
-            return n.node->text().toInt();
+            return n.node->text().toLongLong();
         }
         print();
-        PARSE_ERROR("expected num in stack, got "
+        SYNTAK_ERROR("expected num in stack, got "
                     << n.node->name() );
         return 0;
     }

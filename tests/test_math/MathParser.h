@@ -28,6 +28,7 @@ SOFTWARE.
 #define SYNTAKSRC_TESTS_TEST_MATH_MATHPARSER_H
 
 #include "Parser.h"
+#include "error.h"
 
 #if 1
 #define PRINT(arg__) \
@@ -36,10 +37,12 @@ SOFTWARE.
 #define PRINT(unused__) { }
 #endif
 
+using namespace Syntak;
+
 class MathParser
 {
 public:
-    MathParser() : rootNode(0) { init(); }
+    MathParser() : rootNode(nullptr) { init(); }
     ~MathParser() { delete rootNode; }
 
     struct Node
@@ -72,6 +75,7 @@ public:
             << Token("print", "print")
             << Token("letter", QRegExp("[a-z,A-Z]"))
             << Token("digit", QRegExp("[0-9]"))
+            << Token("ident", QRegExp("[A-Za-z][0-9A-Za-z]*"))
                ;
 
 //#define DO_SIGNED
@@ -101,9 +105,9 @@ public:
         rules.createOr ("statement",    "assignment" , "print_call");
         rules.createAnd("assignment",   "ident", "equals", "expr");
         rules.createAnd("print_call",   "print", "bopen", "expr", "bclose");
-        rules.createAnd("ident",        "letter" , "[alnum]*");
+        //rules.createAnd("ident",        "letter" , "[alnum]*");
         //rules.createAnd("signed_ident", "[op1]" , "ident");
-        rules.createOr ("alnum",        "letter" , "digit");
+        //rules.createOr ("alnum",        "letter" , "digit");
 
 
         rules.check();
@@ -177,7 +181,10 @@ public:
 
         delete rootNode;
         rootNode = parser.parse(text);
-        PRINT("\n" << rootNode->toBracketString(true));
+        //PRINT("\n" << rootNode->toBracketString(true));
+        auto reduced = parser.reduceTree(rootNode);
+        PRINT("\n" << reduced->toBracketString());
+        delete reduced;
         //printNodes();
     }
 
@@ -231,7 +238,7 @@ public:
                 if (!ok)
                 {
                     print();
-                    PARSE_ERROR("Failed to convert '" << text
+                    SYNTAK_ERROR("Failed to convert '" << text
                                 << "' to int");
                 }
             }
@@ -252,7 +259,7 @@ public:
                 if (!ok)
                 {
                     print();
-                    PARSE_ERROR("Failed to convert '" << text
+                    SYNTAK_ERROR("Failed to convert '" << text
                                 << "' to int");
                 }
             }
@@ -260,7 +267,7 @@ public:
         }
 
         print();
-        PARSE_ERROR("expected int in stack, got "
+        SYNTAK_ERROR("expected int in stack, got "
                     << n.node->name());
         return 0;
     }
