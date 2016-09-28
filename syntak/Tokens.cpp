@@ -53,7 +53,7 @@ bool Token::isMatch(const QString& s, int* pos) const
     }
     else
     {
-        int idx = p_regexp.indexIn(s, *pos);
+        int idx = p_regexp.indexIn(s, *pos, QRegExp::CaretAtOffset);
         if (idx != *pos)
             return false;
         //qDebug() << *pos << s.mid(*pos,3) << idx << p_regexp.matchedLength();

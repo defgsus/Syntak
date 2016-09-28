@@ -70,41 +70,18 @@ private:
     int p_level, p_visited;
 };
 
-/*
-class ParsedToken
-{
-public:
-    ParsedToken() : p_rule(nullptr) { }
-
-    bool isValid() const { return !p_text.isEmpty(); }
-
-    const SourcePos& pos() const { return p_pos; }
-    const QString& text() const { return p_text; }
-    const Rule* rule() const { return p_rule; }
-
-    QString toString() const
-        { return QString("%1 \"%2\" @ %3")
-                .arg(rule() ? rule()->name() : QString("NULL"))
-                .arg(text())
-                .arg(pos().toString()); }
-private:
-    friend class Parser;
-    SourcePos p_pos;
-    QString p_text;
-    const Rule* p_rule;
-};
-*/
 
 class ParsedNode
 {
 public:
     ParsedNode()
-        : emitted(false),p_parser(nullptr), p_length(0)
+        : p_parser(nullptr), p_isEmitted(false), p_length(0)
         , p_parent(nullptr), p_rule(nullptr) { }
-    bool emitted;
+
     ~ParsedNode();
 
     bool isValid() const { return p_parser && p_rule; }
+    bool isEmitted() const { return p_isEmitted; }
 
     const SourcePos& pos() const { return p_pos; }
     int length() const { return p_length; }
@@ -127,6 +104,7 @@ private:
     void p_add(const std::vector<ParsedNode*>& n);
     Parser* p_parser;
     SourcePos p_pos;
+    bool p_isEmitted;
     int p_length, p_nextTokenPos;
     ParsedNode* p_parent;
     std::vector<ParsedNode*> p_children;

@@ -59,7 +59,10 @@ public:
     Token(const QString& name, const QRegExp& regexp)
         : p_name    (name)
         , p_regexp  (regexp)
-    { }
+    {
+        if (!p_regexp.pattern().startsWith("^"))
+            p_regexp.setPattern("^" + p_regexp.pattern());
+    }
 
     const QString& name() const { return p_name; }
     const QString& fixedString() const { return p_fixed; }

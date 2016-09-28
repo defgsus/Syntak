@@ -26,7 +26,7 @@ SOFTWARE.
 
 #include "Parser.h"
 
-#if 1
+#if 0
 #   define P_DEBUG(arg__) \
         { QString indent__ = p_level ? QString("%1").arg(p_level) \
                                  : QString(" "); \
@@ -202,13 +202,14 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
             << "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             << " " << subIdx
             );
-    //auto oldPos = curToken().pos();
+    auto oldPos = curToken().pos();
+
     bool ret = parseRule_(node);
     P_DEBUG(") " << node->rule()->toString() << " =" << ret
             //<< "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             );
 
-    //node->p_length = lengthSince(oldPos.pos());
+    node->p_length = lengthSince(oldPos.pos());
 
     auto parent = node->parent();
     bool emitMain = ret && node->rule()->p_func;
@@ -219,17 +220,16 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
     // emit subrules
     if (emitSub)
     {
-        //size_t len =
-        P_DEBUG("EMIL " << node->toString());
+        P_DEBUG("EMIT " << node->toString());
+        node->p_isEmitted = true;
         parent->rule()->subRules()[subIdx].func(node);
     }
 
     // emit rule
     if (emitMain)
     {
-        //size_t len = lengthSince(oldPos.pos());
-
-        P_DEBUG("EMIL " << node->toString());
+        P_DEBUG("EMIT " << node->toString());
+        node->p_isEmitted = true;
         node->rule()->p_func(node);
     }
     ++p_visited;
@@ -267,7 +267,7 @@ bool Parser::parseRule_(ParsedNode* node)
                 subnode->p_pos = curToken().pos();
                 subnode->p_parent = node;
 
-                int startpos = curToken().pos().pos();
+                //int startpos = curToken().pos().pos();
                 bool ret = parseRule(subnode, idx);
                 if (!ret)
                 {
@@ -284,7 +284,7 @@ bool Parser::parseRule_(ParsedNode* node)
                 }
                 else
                 {
-                    subnode->p_length = lengthSince(startpos);
+                    //subnode->p_length = lengthSince(startpos);
                     if (sub.isRecursive)
                     {
                         auto pos = p_lookPos;
@@ -295,14 +295,14 @@ bool Parser::parseRule_(ParsedNode* node)
                             subnode->p_rule = sub.rule;
                             subnode->p_pos = curToken().pos();
                             subnode->p_parent = node;
-                            int startpos2 = curToken().pos().pos();
+                            //int startpos2 = curToken().pos().pos();
                             if (!parseRule(subnode, idx))
                             {
                                 setPos(pos);
                                 delete subnode;
                                 break;
                             }
-                            subnode->p_length = lengthSince(startpos2);
+                            //subnode->p_length = lengthSince(startpos2);
                             subNodes.push_back(subnode);
                             pos = p_lookPos;
                         }
@@ -334,7 +334,7 @@ bool Parser::parseRule_(ParsedNode* node)
                 bool ret = parseRule(subnode, idx);
                 if (ret)
                 {
-                    subnode->p_length = lengthSince(pos);
+                    //subnode->p_length = lengthSince(pos);
                     subnode->p_nextTokenPos = p_lookPos;
                     /*
                     bool relevant = true;
