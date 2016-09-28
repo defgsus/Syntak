@@ -73,15 +73,18 @@ void yabnf()
 }
 
 
+template <typename T>
 void math()
 {
     using namespace Syntak;
 
-    MathParser<double> p;
+    MathParser<T> p;
+    p.addFunction("pow", [](T a, T b) { return std::pow(a, b); });
 
-    //int res = p.evaluate("3*-(2+-(4+-(5+-6)))");
-    //int res = p.evaluate("-(4)");
-    int res = p.evaluate("-(3+4+5)");
+    //T res = p.evaluate("3*-(2+-(4+-(5+-6)))");
+    //T res = p.evaluate("-(4)");
+    //T res = p.evaluate("-(3+4+5)");
+    T res = p.evaluate("pow(pow(2,3), 2)");
     PRINT("'" << p.expression() << "' = " << res);
 }
 
@@ -90,7 +93,7 @@ int main(int, char**)
 {
     //simple();
     //yabnf();
-    math();
+    math<float>();
 
     /*
     QString s = "aber das '%%hallo'";

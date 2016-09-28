@@ -20,6 +20,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 #include <cstddef>
 
+#include <QMap>
+#include <QList>
+
 #include "MathParser.h"
 #include "Parser.h"
 #include "error.h"
@@ -146,6 +149,7 @@ struct MathParser<F>::Private
 {
     Private(MathParser* p)
         : p             (p)
+        , needsReinit   (true)
         , ignoreZeroDiv (false)
     {
 
@@ -167,7 +171,10 @@ struct MathParser<F>::Private
 
     MathParser* p;
     Parser parser;
-    bool ignoreZeroDiv;
+
+    bool needsReinit, ignoreZeroDiv;
+
+    QMap<QString, std::function<F(F, F)>> funcsBinary;
 
     QList<Node> stack;
 };
@@ -177,7 +184,7 @@ template <typename F>
 MathParser<F>::MathParser()
     : p_        (new Private(this))
 {
-    p_->init();
+
 }
 
 template <typename F>
@@ -199,13 +206,23 @@ void MathParser<F>::setIgnoreDivisionByZero(bool e)
     p_->ignoreZeroDiv = e;
 }
 
+template <typename F>
+void MathParser<F>::addFunction(
+        const QString& n, std::function<F(F,F)> foo)
+{
+    p_->needsReinit = p_->funcsBinary.isEmpty();
+    p_->funcsBinary.insert(n, foo);
+}
+
 
 template <typename F>
 void MathParser<F>::Private::init()
 {
     Tokens lex;
 
-    bool isSigned = TypeTraits<F>::isSigned();
+    const bool
+            isSigned = TypeTraits<F>::isSigned(),
+            hasBinaryFunc = !funcsBinary.isEmpty();
 
     lex << Token("plus", "+")
         << Token("minus", "-")
@@ -218,12 +235,17 @@ void MathParser<F>::Private::init()
         lex << Token("num", TypeTraits<F>::numberRegex());
     else
         lex << Token("unsigned_num", TypeTraits<F>::numberRegex());
+    if (hasBinaryFunc)
+    {
+        lex << Token("comma", ",");
+        lex << Token("ident", QRegExp("[A-Za-z_]+"));
+    }
 
     Rules rules;
     rules.addTokens(lex);
 
     // top rule
-    rules.createAnd("expression",       "expr");
+    rules.createAnd("expression",   "expr");
 
     rules.createOr( "op1",          "plus" , "minus");
     rules.createOr( "op2",          "mul" , "div", "mod");
@@ -231,7 +253,7 @@ void MathParser<F>::Private::init()
     rules.createAnd("op2_factor",   "op2" , "factor");
     rules.createAnd("expr",         "term" , "[op1_term]*");
     rules.createAnd("term",         "factor" , "[op2_factor]*");
-    rules.createOr( "factor",       "num", "quoted_expr");
+    QStringList factorList; factorList << "num" << "quoted_expr";
     if (!isSigned)
     {
         rules.createAnd("quoted_expr",  "bopen" , "expr" , "bclose");
@@ -242,6 +264,14 @@ void MathParser<F>::Private::init()
                                         "expr" , "bclose");
         rules.createAnd("num",          "[op1]", "unsigned_num");
     }
+    if (hasBinaryFunc)
+    {
+        rules.createAnd("binary_func",  QStringList()
+                        << "ident" << "bopen" << "expr" << "comma"
+                        << "expr" << "bclose");
+        factorList << "binary_func";
+    }
+    rules.createOr( "factor",       factorList);
 
     rules.check();
 
@@ -286,6 +316,26 @@ void MathParser<F>::Private::init()
             {
                 stack << Node(-takeLastValue());
             }
+        });
+    }
+    if (hasBinaryFunc)
+    {
+        rules.connect("binary_func", [=](ParsedNode* n)
+        {
+            SYNTAK_DEBUG("EMIT " << n->toString());
+            if (n->children().empty())
+                SYNTAK_ERROR("Expected identifier node in "
+                             "binary_func node");
+            if (n->children()[0]->name() != "ident")
+                SYNTAK_ERROR("Expected identifier node in "
+                             "binary_func node, got "
+                             << n->children()[0]->name());
+            QString func = n->children()[0]->text();
+            if (!funcsBinary.contains(func))
+                SYNTAK_ERROR("Unknown function '" << func << "' at "
+                             << n->pos().toString());
+            F p2 = takeLastValue(), p1 = takeLastValue();
+            stack << Node(funcsBinary.value(func)(p1, p2));
         });
     }
 
@@ -344,6 +394,12 @@ F MathParser<F>::Private::f_divide(F p1, F p2, const ParsedNode* n)
 template <typename F>
 F MathParser<F>::evaluate(const QString& expression)
 {
+    if (p_->needsReinit)
+    {
+        p_->needsReinit = false;
+        p_->init();
+    }
+
     p_->stack.clear();
     auto node = p_->parser.parse(expression);
     if (p_->stack.size() != 1)
