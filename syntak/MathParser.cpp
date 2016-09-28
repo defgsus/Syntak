@@ -24,6 +24,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 #include "Parser.h"
 #include "error.h"
 
+#if 0
+#   define SYNTAK_DEBUG(arg__) { qDebug().noquote().nospace() << arg__; }
+#else
+#   define SYNTAK_DEBUG(unused__) { }
+#endif
+
 namespace Syntak {
 
 namespace {
@@ -34,64 +40,98 @@ namespace {
     template <>
     struct TypeTraits<uint8_t>
     {
-        static uint8_t toValue(const QString& t) { return t.toUInt(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef uint8_t T;
+        static bool isSigned() { return false; }
+        static T toValue(const QString& t) { return t.toUInt(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
     template <>
     struct TypeTraits<uint16_t>
     {
-        static uint16_t toValue(const QString& t) { return t.toUInt(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef uint16_t T;
+        static bool isSigned() { return false; }
+        static T toValue(const QString& t) { return t.toUInt(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
     template <>
     struct TypeTraits<uint32_t>
     {
-        static uint32_t toValue(const QString& t) { return t.toUInt(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef uint32_t T;
+        static bool isSigned() { return false; }
+        static T toValue(const QString& t) { return t.toUInt(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
     template <>
     struct TypeTraits<uint64_t>
     {
-        static uint64_t toValue(const QString& t) { return t.toInt(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef uint64_t T;
+        static bool isSigned() { return false; }
+        static T toValue(const QString& t)
+            { return t.toULongLong(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
 
     template <>
     struct TypeTraits<int8_t>
     {
-        static int8_t toValue(const QString& t) { return t.toInt(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef int8_t T;
+        static bool isSigned() { return true; }
+        static T toValue(const QString& t) { return t.toInt(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
     template <>
     struct TypeTraits<int16_t>
     {
-        static int16_t toValue(const QString& t) { return t.toInt(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef int16_t T;
+        static bool isSigned() { return true; }
+        static T toValue(const QString& t) { return t.toInt(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
     template <>
     struct TypeTraits<int32_t>
     {
-        static int32_t toValue(const QString& t) { return t.toInt(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef int32_t T;
+        static bool isSigned() { return true; }
+        static T toValue(const QString& t) { return t.toInt(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
     template <>
     struct TypeTraits<int64_t>
     {
-        static int64_t toValue(const QString& t) { return t.toLongLong(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef int64_t T;
+        static bool isSigned() { return true; }
+        static T toValue(const QString& t)
+            { return t.toLongLong(); }
+        static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
+        static T modulo(T a, T b) { return a % b; }
     };
 
     template <>
     struct TypeTraits<float>
     {
-        static float toValue(const QString& t) { return t.toFloat(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef float T;
+        static bool isSigned() { return true; }
+        static T toValue(const QString& t) { return t.toFloat(); }
+        static QRegExp numberRegex() { return QRegExp(
+                "(\\d+(\\.\\d*)?|\\.\\d+)([eE][+-]?\\d+)?"); }
+        static T modulo(T a, T b) { return std::fmod(a, b); }
     };
     template <>
     struct TypeTraits<double>
     {
-        static double toValue(const QString& t) { return t.toDouble(); }
-        static QRegExp numberRegex() { return QRegExp("[0-9][0-9]*"); }
+        typedef double T;
+        static bool isSigned() { return true; }
+        static T toValue(const QString& t) { return t.toDouble(); }
+        static QRegExp numberRegex() { return QRegExp(
+                "(\\d+(\\.\\d*)?|\\.\\d+)([eE][+-]?\\d+)?"); }
+        static T modulo(T a, T b) { return std::fmod(a, b); }
     };
 
 
@@ -105,7 +145,8 @@ template <typename F>
 struct MathParser<F>::Private
 {
     Private(MathParser* p)
-        : p     (p)
+        : p             (p)
+        , ignoreZeroDiv (false)
     {
 
     }
@@ -121,8 +162,12 @@ struct MathParser<F>::Private
     void init();
     F takeLastValue();
 
+    F f_modulo(F p1, F p2, const ParsedNode* n);
+    F f_divide(F p1, F p2, const ParsedNode* n);
+
     MathParser* p;
     Parser parser;
+    bool ignoreZeroDiv;
 
     QList<Node> stack;
 };
@@ -144,45 +189,73 @@ MathParser<F>::~MathParser()
 template <typename F>
 const Parser& MathParser<F>::parser() const { return p_->parser; }
 
+template <typename F>
+const QString& MathParser<F>::expression() const
+    { return p_->parser.text(); }
+
+template <typename F>
+void MathParser<F>::setIgnoreDivisionByZero(bool e)
+{
+    p_->ignoreZeroDiv = e;
+}
+
 
 template <typename F>
 void MathParser<F>::Private::init()
 {
     Tokens lex;
 
+    bool isSigned = TypeTraits<F>::isSigned();
+
     lex << Token("plus", "+")
         << Token("minus", "-")
         << Token("mul", "*")
         << Token("div", "/")
+        << Token("mod", "%")
         << Token("bopen", "(")
-        << Token("bclose", ")")
-        << Token("num", TypeTraits<F>::numberRegex())
-           ;
+        << Token("bclose", ")");
+    if (!isSigned)
+        lex << Token("num", TypeTraits<F>::numberRegex());
+    else
+        lex << Token("unsigned_num", TypeTraits<F>::numberRegex());
 
     Rules rules;
     rules.addTokens(lex);
+
+    // top rule
+    rules.createAnd("expression",       "expr");
+
     rules.createOr( "op1",          "plus" , "minus");
-    rules.createOr( "op2",          "mul" , "div");
+    rules.createOr( "op2",          "mul" , "div", "mod");
     rules.createAnd("op1_term",     "op1" , "term");
     rules.createAnd("op2_factor",   "op2" , "factor");
     rules.createAnd("expr",         "term" , "[op1_term]*");
     rules.createAnd("term",         "factor" , "[op2_factor]*");
-    rules.createAnd("quoted_expr",  "bopen" , "expr" , "bclose");
     rules.createOr( "factor",       "num", "quoted_expr");
-
-    rules.createAnd("program",      "expr");
+    if (!isSigned)
+    {
+        rules.createAnd("quoted_expr",  "bopen" , "expr" , "bclose");
+    }
+    else
+    {
+        rules.createAnd("quoted_expr",  "[op1]", "bopen",
+                                        "expr" , "bclose");
+        rules.createAnd("num",          "[op1]", "unsigned_num");
+    }
 
     rules.check();
 
     // num in factor
     rules.connect("factor", 0, [=](ParsedNode* n)
     {
+        SYNTAK_DEBUG("EMIT " << n->toString());
         stack << n;
     });
 
     rules.connect("op1_term", [=](ParsedNode* n)
     {
-        int p2 = takeLastValue(), p1 = takeLastValue();
+        SYNTAK_DEBUG("EMIT " << n->toString());
+        F p2 = takeLastValue(), p1 = takeLastValue();
         if (n->text().startsWith("+"))
             stack << Node(p1 + p2);
         else
@@ -190,12 +263,31 @@ void MathParser<F>::Private::init()
     });
     rules.connect("op2_factor", [=](ParsedNode* n)
     {
-        int p2 = takeLastValue(), p1 = takeLastValue();
+        SYNTAK_DEBUG("EMIT " << n->toString());
+        F p2 = takeLastValue(), p1 = takeLastValue();
         if (n->text().startsWith("*"))
             stack << Node(p1 * p2);
+        else if (n->text().startsWith("%"))
+            stack << Node(f_modulo(p1, p2, n));
         else
-            stack << Node(p2 != 0 ? (p1 / p2) : 0);
+            stack << Node(f_divide(p1, p2, n));
     });
+
+    if (isSigned)
+    {
+        // sign of quoted expression
+        rules.connect("quoted_expr", [=](ParsedNode* n)
+        {
+            SYNTAK_DEBUG("EMIT " << n->toString());
+            // if expression is negative:
+            // pop last value (evaluated result of quoted expression)
+            // and push back negative
+            if (n->text().startsWith("-"))
+            {
+                stack << Node(-takeLastValue());
+            }
+        });
+    }
 
     parser.setTokens(lex);
     parser.setRules(rules);
@@ -204,18 +296,50 @@ void MathParser<F>::Private::init()
 template <typename F>
 F MathParser<F>::Private::takeLastValue()
 {
+    if (stack.isEmpty())
+        SYNTAK_ERROR("math stack empty");
+
     const Node& n = stack.takeLast();
     if (!n.node)
         return n.value;
+
     if (n.node->name() == "num")
     {
         return TypeTraits<F>::toValue( n.node->text() );
     }
+
     SYNTAK_ERROR("expected num in stack, got "
                 << n.node->name() );
     return 0;
 }
 
+template <typename F>
+F MathParser<F>::Private::f_modulo(F p1, F p2, const ParsedNode* n)
+{
+    if (p2 == F(0))
+    {
+        if (!ignoreZeroDiv)
+            SYNTAK_ERROR("Modulo by zero at " << n->pos().toString())
+        else
+            return F(0);
+    }
+    else
+        return TypeTraits<F>::modulo(p1, p2);
+}
+
+template <typename F>
+F MathParser<F>::Private::f_divide(F p1, F p2, const ParsedNode* n)
+{
+    if (p2 == F(0))
+    {
+        if (!ignoreZeroDiv)
+            SYNTAK_ERROR("Division by zero at " << n->pos().toString())
+        else
+            return F(0);
+    }
+    else
+        return p1 / p2;
+}
 
 template <typename F>
 F MathParser<F>::evaluate(const QString& expression)

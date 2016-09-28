@@ -83,6 +83,7 @@ private slots:
     void testTokenizerSingle();
     void testTokenizerMulti();
     void testTokenizerRegex();
+    void testTokenizerRegex2();
     void testTokenizerMultiSpeed();
 
 };
@@ -154,12 +155,65 @@ void SyntakTestCore::testTokenizerRegex()
         << Token("q", QRegExp("'[\x01-\xff]*'"))
     ;
     Tokenizer lex(tok);
+    QString s, e;
 
     lex.tokenize("123abc'quoted'");
-    QString s = lex.toString(),
-            e = QString("d(1)@0 d(2)@1 d(3)@2 c(a)@3 c(b)@4 c(c)@5 "
-                        "q('quoted')@6 EOF()@14 ");
+    s = lex.toString();
+    e = QString("d(1)@0 d(2)@1 d(3)@2 c(a)@3 c(b)@4 c(c)@5 "
+                "q('quoted')@6 EOF()@14 ");
     QCOMPARE(s, e);
+
+    lex.tokenize("'quot");
+    s = lex.toString();
+    e = QString("c(q)@1 c(u)@2 c(o)@3 c(t)@4 EOF()@5 ");
+    QCOMPARE(s, e);
+}
+
+void SyntakTestCore::testTokenizerRegex2()
+{
+    Tokens tok;
+    tok << Token("dbl", QRegExp(
+        "[+-]?(\\d+(\\.\\d*)?|\\.\\d+)([eE][+-]?\\d+)?"))
+    ;
+    Tokenizer lex(tok);
+    QString s, e;
+
+    lex.tokenize("1"); s = lex.toString();
+    e = "dbl(1)@0 EOF()@1 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("1."); s = lex.toString();
+    e = "dbl(1.)@0 EOF()@2 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("1.1"); s = lex.toString();
+    e = "dbl(1.1)@0 EOF()@3 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("-1.1"); s = lex.toString();
+    e = "dbl(-1.1)@0 EOF()@4 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("-.1"); s = lex.toString();
+    e = "dbl(-.1)@0 EOF()@3 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("+.0"); s = lex.toString();
+    e = "dbl(+.0)@0 EOF()@3 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("123."); s = lex.toString();
+    e = "dbl(123.)@0 EOF()@4 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("123.56"); s = lex.toString();
+    e = "dbl(123.56)@0 EOF()@6 ";
+    QCOMPARE(s, e);
+
+    lex.tokenize("."); s = lex.toString();
+    e = "EOF()@1 ";
+    QCOMPARE(s, e);
+
 }
 
 void SyntakTestCore::testTokenizerMultiSpeed()

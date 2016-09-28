@@ -63,7 +63,7 @@ public:
         , p_regexp  (regexp)
     {
         if (!p_regexp.pattern().startsWith("^"))
-            p_regexp.setPattern("^" + p_regexp.pattern());
+            p_regexp.setPattern("^(" + p_regexp.pattern() + ")");
     }
 
     const QString& name() const { return p_name; }

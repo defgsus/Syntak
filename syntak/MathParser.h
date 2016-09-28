@@ -37,7 +37,10 @@ public:
     MathParser();
     ~MathParser();
 
+    void setIgnoreDivisionByZero(bool e);
+
     const Parser& parser() const;
+    const QString& expression() const;
 
     IntOrFloat evaluate(const QString& expression);
 

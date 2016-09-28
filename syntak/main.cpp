@@ -2,6 +2,7 @@
 #include <QDebug>
 
 #include "Parser.h"
+#include "MathParser.h"
 
 #define PRINT(arg__) { qDebug().noquote().nospace() << arg__; }
 
@@ -72,10 +73,25 @@ void yabnf()
 }
 
 
+void math()
+{
+    using namespace Syntak;
+
+    MathParser<double> p;
+
+    //int res = p.evaluate("3*-(2+-(4+-(5+-6)))");
+    //int res = p.evaluate("-(4)");
+    int res = p.evaluate("-(3+4+5)");
+    PRINT("'" << p.expression() << "' = " << res);
+}
+
+
 int main(int, char**)
 {
     //simple();
-    yabnf();
+    //yabnf();
+    math();
+
     /*
     QString s = "aber das '%%hallo'";
     //QRegExp ident("[A-Za-z][A-Za-z0-9]*");
