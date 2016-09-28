@@ -98,7 +98,9 @@ void math()
     //T res = p.evaluate("-(4)");
     //T res = p.evaluate("-(3+4+5)");
     //T res = p.evaluate("pow(pow(2,3), 2)");
-    T res = p.evaluate("pow(2, 3)");
+    //T res = p.evaluate("pow(2, 3)");
+    T res = p.evaluate("2^2^3");
+
     PRINT("'" << p.expression() << "' = " << res);
 }
 

@@ -311,6 +311,7 @@ void MathParser<F>::Private::init()
         << Token("mul", "*")
         << Token("div", "/")
         << Token("mod", "%")
+        << Token("caret", "^")
         << Token("bopen", "(")
         << Token("bclose", ")");
     if (!isSigned)
@@ -336,7 +337,15 @@ void MathParser<F>::Private::init()
     rules.createAnd("op1_term",     "op1" , "term");
     rules.createAnd("op2_factor",   "op2" , "factor");
     rules.createAnd("expr",         "term" , "[op1_term]*");
+#if 1
     rules.createAnd("term",         "factor" , "[op2_factor]*");
+#else
+    rules.createAnd("caret_factor", "caret" , "factor");
+    rules.createAnd("term",         "pow_factor" , "[op2_factor]*");
+    rules.createOr ("pow_factor",   "[pow_term]", "factor");
+    rules.createAnd("pow_term",     "factor", "caret_factor",
+                                             "[caret_factor]*");
+#endif
     QStringList factorList; factorList << "num" << "quoted_expr";
     if (!isSigned)
     {
@@ -345,7 +354,7 @@ void MathParser<F>::Private::init()
     else
     {
         rules.createAnd("quoted_expr",  "[op1]", "bopen",
-                                        "expr" , "bclose");
+                                                 "expr" , "bclose");
         rules.createAnd("num",          "[op1]", "unsigned_num");
     }
     if (hasFuncs)
@@ -380,7 +389,6 @@ void MathParser<F>::Private::init()
     });
     rules.connect("op2_factor", [=](ParsedNode* n)
     {
-        SYNTAK_DEBUG("EMIT " << n->toString());
         F p2 = takeLastValue(), p1 = takeLastValue();
         if (n->text().startsWith("*"))
             stack << Node(p1 * p2);
@@ -389,6 +397,12 @@ void MathParser<F>::Private::init()
         else
             stack << Node(f_divide(p1, p2, n));
     });
+    /*
+    rules.connect("caret_factor", [=](ParsedNode* )
+    {
+        F p2 = takeLastValue(), p1 = takeLastValue();
+        stack << Node(std::pow(p1, p2));
+    });*/
 
     if (isSigned)
     {

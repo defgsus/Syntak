@@ -313,6 +313,9 @@ bool Parser::Private::parseRule(ParsedNode* node)
     if (!curToken().isValid() || curToken().name() == "EOF")
         return false;
 
+    //if (!node->rule()->wants(curToken().name()))
+    //    return false;
+
     LevelInc linc(&p_level);
 
     SYNTAK_DEBUG(node->rule()->toString() << " ("
@@ -415,7 +418,7 @@ bool Parser::Private::parseRuleAnd(ParsedNode* node)
     return true;
 }
 
-
+#if 0
 bool Parser::Private::parseRuleOr(ParsedNode* node)
 {
     std::vector<ParsedNode*> subNodes;
@@ -489,7 +492,37 @@ bool Parser::Private::parseRuleOr(ParsedNode* node)
     setPos(rel->p_nextTokenPos);
     return true;
 }
+#else
+bool Parser::Private::parseRuleOr(ParsedNode* node)
+{
+    auto pos = p_lookPos;
+    for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
+    {
+        const Rule::SubRule& sub = node->rule()->subRules()[idx];
 
+        setPos(pos);
+
+        auto subnode = new ParsedNode();
+        subnode->p_parser = p;
+        subnode->p_rule = sub.rule;
+        subnode->p_pos = curToken().pos();
+        subnode->p_parent = node;
+
+        bool ret = parseRule(subnode);
+        if (ret)
+        {
+            subnode->p_nextTokenPos = p_lookPos;
+            node->p_add(subnode);
+            return true;
+        }
+        else
+            delete subnode;
+    }
+
+    setPos(pos);
+    return false;
+}
+#endif
 
 void Parser::Private::emitNodes(ParsedNode* node)
 {
