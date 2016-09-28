@@ -47,8 +47,14 @@ public:
 
     void setIgnoreDivisionByZero(bool e);
 
-    /** Adds a binary function to the syntax */
+    /** Adds an unary function to the grammar */
+    void addFunction(const QString& name, std::function<T(T)>);
+    /** Adds a binary function to the grammar */
     void addFunction(const QString& name, std::function<T(T, T)>);
+    /** Adds a ternary function to the grammar */
+    void addFunction(const QString& name, std::function<T(T, T, T)>);
+    /** Adds a function with 4 arguments to the grammar */
+    void addFunction(const QString& name, std::function<T(T, T, T, T)>);
 
 private:
     struct Private;

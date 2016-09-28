@@ -67,6 +67,16 @@ void Rule::connect(int idx, Callback f)
         p_subRules[idx].func = f;
 }
 
+bool Rule::isConnected() const
+{
+    if (p_func)
+        return true;
+    for (const SubRule& r : p_subRules)
+        if (r.func)
+            return true;
+    return false;
+}
+
 
 Rule* Rules::find(const QString &name)
 {
@@ -120,6 +130,7 @@ Rule::SubRule Rules::makeSubRule(const QString& s)
     r.isRecursive = s.endsWith("*");
     r.name = s;
     r.name.remove("[").remove("]").remove("*");
+    r.func = nullptr;
     return r;
 
 }
@@ -129,6 +140,7 @@ void Rules::p_add(Rule* r)
     auto sp = std::shared_ptr<Rule>(r);
     p_rules.insert(std::make_pair(r->name(), sp));
     p_checked = false;
+    p_connected |= r->isConnected();
 }
 
 Rule* Rules::createAnd(const QString& name,
@@ -170,7 +182,10 @@ void Rules::addTokens(const Tokens& tok)
 void Rules::connect(const QString &name, Rule::Callback f)
 {
     if (auto r = find(name))
+    {
         r->connect(f);
+        p_connected = true;
+    }
     else
         SYNTAK_ERROR("Attempt to connect to unknown rule " << name);
 }
@@ -178,7 +193,13 @@ void Rules::connect(const QString &name, Rule::Callback f)
 void Rules::connect(const QString &name, int idx, Rule::Callback f)
 {
     if (auto r = find(name))
+    {
+        if (idx < 0 || idx >= r->subRules().size())
+            SYNTAK_ERROR("Connection subrule index " << idx
+                         << " out of range for rule " << r->toString());
         r->connect(idx, f);
+        p_connected = true;
+    }
     else
         SYNTAK_ERROR("Attempt to connect to unknown rule " << name);
 }
@@ -206,9 +227,12 @@ QString Rules::toDefinitionString() const
 void Rules::p_check()
 {
     p_topRule = nullptr;
+    p_connected = false;
 
     for (auto& i : p_rules)
     {
+        p_connected |= i.second->isConnected();
+
         i.second->p_isTop = false;
         for (Rule::SubRule& sub : i.second->p_subRules)
         {

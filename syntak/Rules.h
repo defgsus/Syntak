@@ -68,6 +68,7 @@ public:
     const QString& name() const { return p_name; }
     const Token& token() const { return p_token; }
     bool isTop() const { return p_isTop; }
+    bool isConnected() const;
 
     const QList<SubRule>& subRules() const { return p_subRules; }
     bool contains(const QString& name) const;
@@ -99,7 +100,10 @@ private:
 class Rules
 {
 public:
-    Rules() : p_checked(false) { }
+    Rules() : p_checked(false), p_connected(false) { }
+
+    /** Is any of the rules connected? */
+    bool isConnected() const { return p_connected; }
 
     Rule* find(const QString& name);
     Rule* topRule() const { return p_topRule; }
@@ -155,6 +159,7 @@ private:
     bool p_checked;
     std::map<QString, std::shared_ptr<Rule>> p_rules;
     Rule* p_topRule;
+    bool p_connected;
 };
 
 } // namespace Syntak

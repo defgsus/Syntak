@@ -28,14 +28,23 @@ SOFTWARE.
 #include "error.h"
 
 #if 0
-#   define P_DEBUG(arg__) \
+#   define SYNTAK_DEBUG(arg__) \
+#   define SYNTAK_DO_DEBUG \
         { QString indent__ = p_level ? QString("%1").arg(p_level) \
                                  : QString(" "); \
       indent__ += QString(" ").repeated(p_level+1 - indent__.size()); \
       qDebug().noquote().nospace() << indent__ << arg__; }
 #else
-#   define P_DEBUG(unused__) { }
+#   define SYNTAK_DEBUG(unused__) { }
 #endif
+
+#if 0 || defined(SYNTAK_DO_DEBUG)
+#   define SYNTAK_DEBUG_EMIT(arg__) \
+        { qDebug().noquote().nospace() << arg__; }
+#else
+#   define SYNTAK_DEBUG_EMIT(unused__) { }
+#endif
+
 
 namespace Syntak {
 
@@ -64,7 +73,7 @@ int ParsedNode::numChildLevels() const
 QString ParsedNode::toString() const
 {
     if (!isValid())
-        return "INVALID";
+        return "*INVALID*";
     return QString("%1(@%2-%3,d=%4)'%5'")
             .arg(rule()->name())
             .arg(pos().toString())
@@ -76,7 +85,7 @@ QString ParsedNode::toString() const
 QString ParsedNode::text() const
 {
     if (!isValid())
-        return QString("INVALID");
+        return QString("*INVALID*");
     return p_parser->text().mid(pos().pos(), length());
 }
 
@@ -170,8 +179,12 @@ struct Parser::Private
 
     void clear();
     ParsedNode* parse(const QString& text);
-    bool parseRule(ParsedNode* node, int subIdx=-1);
-    bool parseRuleImpl(ParsedNode* node);
+    bool parseRule(ParsedNode* node);
+    bool parseRuleToken(ParsedNode* node);
+    bool parseRuleAnd(ParsedNode* node);
+    bool parseRuleOr(ParsedNode* node);
+
+    void emitNodes(ParsedNode* root);
 
     const ParsedToken& curToken() const { return p_look; }
     bool forward();
@@ -252,7 +265,7 @@ ParsedNode* Parser::Private::parse(const QString &text)
     p_lexer.tokenize(p_text);
     setPos(0);
 
-    P_DEBUG("LEXED: " << p_lexer.toString());
+    SYNTAK_DEBUG("LEXED: " << p_lexer.toString());
 
     if (!p_rules.topRule())
         SYNTAK_ERROR("No top-level rule defined");
@@ -264,6 +277,10 @@ ParsedNode* Parser::Private::parse(const QString &text)
         SYNTAK_ERROR("No top-level statement in source '"
                     << text << "'");
     node->p_length = lengthSince(0);
+
+    if (p_rules.isConnected())
+        emitNodes(node);
+
     return node;
 }
 
@@ -278,223 +295,221 @@ size_t Parser::Private::lengthSince(size_t oldPos) const
     return curPos - oldPos;
 }
 
-bool Parser::Private::parseRule(ParsedNode* node, int subIdx)
+bool Parser::Private::parseRule(ParsedNode* node)
 {
     if (!curToken().isValid() || curToken().name() == "EOF")
         return false;
 
     LevelInc linc(&p_level);
 
-    P_DEBUG(node->rule()->toString() << " ("
+    SYNTAK_DEBUG(node->rule()->toString() << " ("
             << "\t\"" << p_text.mid(curToken().pos().pos(), 4) << "\""
             << " " << subIdx
             );
+
     auto oldPos = curToken().pos();
 
-    bool ret = parseRuleImpl(node);
-    P_DEBUG(") " << node->rule()->toString() << " =" << ret
+    bool ret;
+    switch (node->rule()->type())
+    {
+        case Rule::T_TOKEN: ret = parseRuleToken(node); break;
+        case Rule::T_AND: ret = parseRuleAnd(node); break;
+        case Rule::T_OR: ret = parseRuleOr(node); break;
+        default: SYNTAK_ERROR("Unknown rule type "
+                              << node->rule()->type() << " in node "
+                              << node->toString());
+    }
+
+    SYNTAK_DEBUG(") " << node->rule()->toString() << " =" << ret
             //<< "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             );
 
     node->p_length = lengthSince(oldPos.pos());
 
-    auto parent = node->parent();
-    bool emitMain = ret && node->rule()->p_func;
-    bool emitSub = ret && parent && subIdx >= 0
-            && subIdx < parent->rule()->subRules().size()
-            && parent->rule()->subRules()[subIdx].func;
-
-    // emit subrules
-    if (emitSub)
-    {
-        P_DEBUG("--> EMIT " << node->toString());
-        node->p_isEmitted = true;
-        parent->rule()->subRules()[subIdx].func(node);
-    }
-
-    // emit rule
-    if (emitMain)
-    {
-        P_DEBUG("--> EMIT " << node->toString());
-        node->p_isEmitted = true;
-        node->rule()->p_func(node);
-    }
     ++p_visited;
 
     return ret;
 }
 
-bool Parser::Private::parseRuleImpl(ParsedNode* node)
+
+bool Parser::Private::parseRuleToken(ParsedNode* node)
 {
-    switch (node->rule()->type())
+    if (curToken().name() != node->rule()->name())
     {
-        case Rule::T_TOKEN:
+        return false;
+    }
+    forward();
+    return true;
+}
+
+bool Parser::Private::parseRuleAnd(ParsedNode* node)
+{
+    std::vector<ParsedNode*> subNodes;
+
+    auto backup = p_lookPos;
+    for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
+    {
+        const Rule::SubRule& sub = node->rule()->subRules()[idx];
+
+        auto subnode = new ParsedNode();
+        subNodes.push_back(subnode);
+        subnode->p_parser = p;
+        subnode->p_rule = sub.rule;
+        subnode->p_pos = curToken().pos();
+        subnode->p_parent = node;
+
+        //int startpos = curToken().pos().pos();
+        bool ret = parseRule(subnode);
+        if (!ret)
         {
-            if (curToken().name() != node->rule()->name())
+            if (!sub.isOptional)
             {
+                setPos(backup);
+                for (auto s : subNodes)
+                    delete s;
                 return false;
             }
-            forward();
-            return true;
+
+            delete subNodes.back();
+            subNodes.pop_back();
         }
-
-        case Rule::T_AND:
+        else
         {
-            std::vector<ParsedNode*> subNodes;
-
-            auto backup = p_lookPos;
-            for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
+            //subnode->p_length = lengthSince(startpos);
+            if (sub.isRecursive)
             {
-                const Rule::SubRule& sub = node->rule()->subRules()[idx];
-
-                auto subnode = new ParsedNode();
-                subNodes.push_back(subnode);
-                subnode->p_parser = p;
-                subnode->p_rule = sub.rule;
-                subnode->p_pos = curToken().pos();
-                subnode->p_parent = node;
-
-                //int startpos = curToken().pos().pos();
-                bool ret = parseRule(subnode, idx);
-                if (!ret)
+                auto pos = p_lookPos;
+                while (true)
                 {
-                    if (!sub.isOptional)
+                    auto subnode = new ParsedNode();
+                    subnode->p_parser = p;
+                    subnode->p_rule = sub.rule;
+                    subnode->p_pos = curToken().pos();
+                    subnode->p_parent = node;
+                    //int startpos2 = curToken().pos().pos();
+                    if (!parseRule(subnode))
                     {
-                        setPos(backup);
-                        for (auto s : subNodes)
-                            delete s;
-                        return false;
-                    }
-
-                    delete subNodes.back();
-                    subNodes.pop_back();
-                }
-                else
-                {
-                    //subnode->p_length = lengthSince(startpos);
-                    if (sub.isRecursive)
-                    {
-                        auto pos = p_lookPos;
-                        while (true)
-                        {
-                            auto subnode = new ParsedNode();
-                            subnode->p_parser = p;
-                            subnode->p_rule = sub.rule;
-                            subnode->p_pos = curToken().pos();
-                            subnode->p_parent = node;
-                            //int startpos2 = curToken().pos().pos();
-                            if (!parseRule(subnode, idx))
-                            {
-                                setPos(pos);
-                                delete subnode;
-                                break;
-                            }
-                            //subnode->p_length = lengthSince(startpos2);
-                            subNodes.push_back(subnode);
-                            pos = p_lookPos;
-                        }
-                    }
-                }
-            }
-            node->p_add(subNodes);
-            return true;
-        }
-        break;
-
-        case Rule::T_OR:
-        {
-            std::vector<ParsedNode*> subNodes;
-
-            auto pos = p_lookPos;
-            for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
-            {
-                const Rule::SubRule& sub = node->rule()->subRules()[idx];
-
-                setPos(pos);
-
-                auto subnode = new ParsedNode();
-                subnode->p_parser = p;
-                subnode->p_rule = sub.rule;
-                subnode->p_pos = curToken().pos();
-                subnode->p_parent = node;
-
-                bool ret = parseRule(subnode, idx);
-                if (ret)
-                {
-                    //subnode->p_length = lengthSince(pos);
-                    subnode->p_nextTokenPos = p_lookPos;
-                    /*
-                    bool relevant = true;
-                    for (auto s : subNodes)
-                    if (subnode->length() < s->length()
-                     || subnode->numChildLevels() < s->numChildLevels()
-                            )
-                    {
-                        relevant = false;
+                        setPos(pos);
+                        delete subnode;
                         break;
                     }
-                    if (!relevant)
-                    {
-                        P_DEBUG("discarding OR " << subnode->toString());
-                        delete subnode;
-                    }
-                    else*/
-                        subNodes.push_back(subnode);
-                }
-                else
-                    delete subnode;
-            }
-
-            if (subNodes.empty())
-            {
-                setPos(pos);
-                return false;
-            }
-
-            if (subNodes.size() == 1)
-            {
-                //P_DEBUG("one resulting OR node "
-                //        << subNodes.front()->toString());
-                node->p_add(subNodes.front());
-                setPos(subNodes.front()->p_nextTokenPos);
-                return true;
-            }
-
-            // find most "relevant"
-            ParsedNode* rel = 0;
-            int maxCh = -1, maxLen = -1;
-            for (auto s : subNodes)
-            {
-                if (rel == nullptr)
-                {
-                    rel = s;
-                    break;
-                }
-                int len = s->length();
-                if (len > maxLen)
-                    rel = s, maxLen = len;
-                else
-                {
-                    int ch = s->numChildLevels();
-                    if (ch > maxCh)
-                        rel = s, maxCh = ch;
+                    //subnode->p_length = lengthSince(startpos2);
+                    subNodes.push_back(subnode);
+                    pos = p_lookPos;
                 }
             }
-            for (auto s : subNodes)
-            if (s != rel)
-            {
-                P_DEBUG("discarding OR " << s->toString());
-                delete s;
-            }
-            P_DEBUG("keeping OR " << rel->toString());
-            node->p_add(rel);
-            setPos(rel->p_nextTokenPos);
-            return true;
         }
-        break;
+    }
+    node->p_add(subNodes);
+    return true;
+}
+
+
+bool Parser::Private::parseRuleOr(ParsedNode* node)
+{
+    std::vector<ParsedNode*> subNodes;
+
+    auto pos = p_lookPos;
+    for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
+    {
+        const Rule::SubRule& sub = node->rule()->subRules()[idx];
+
+        setPos(pos);
+
+        auto subnode = new ParsedNode();
+        subnode->p_parser = p;
+        subnode->p_rule = sub.rule;
+        subnode->p_pos = curToken().pos();
+        subnode->p_parent = node;
+
+        bool ret = parseRule(subnode);
+        if (ret)
+        {
+            subnode->p_nextTokenPos = p_lookPos;
+            subNodes.push_back(subnode);
+        }
+        else
+            delete subnode;
     }
 
-    return false;
+    if (subNodes.empty())
+    {
+        setPos(pos);
+        return false;
+    }
+
+    if (subNodes.size() == 1)
+    {
+        //P_DEBUG("one resulting OR node "
+        //        << subNodes.front()->toString());
+        node->p_add(subNodes.front());
+        setPos(subNodes.front()->p_nextTokenPos);
+        return true;
+    }
+
+    // find most "relevant"
+    ParsedNode* rel = 0;
+    int maxCh = -1, maxLen = -1;
+    for (auto s : subNodes)
+    {
+        if (rel == nullptr)
+        {
+            rel = s;
+            break;
+        }
+        int len = s->length();
+        if (len > maxLen)
+            rel = s, maxLen = len;
+        else
+        {
+            int ch = s->numChildLevels();
+            if (ch > maxCh)
+                rel = s, maxCh = ch;
+        }
+    }
+    for (auto s : subNodes)
+    if (s != rel)
+    {
+        SYNTAK_DEBUG("discarding OR " << s->toString());
+        delete s;
+    }
+    SYNTAK_DEBUG("keeping OR " << rel->toString());
+    node->p_add(rel);
+    setPos(rel->p_nextTokenPos);
+    return true;
+}
+
+
+void Parser::Private::emitNodes(ParsedNode* node)
+{
+    // depth-first
+    for (auto c : node->children())
+        emitNodes(c);
+
+    if (!node->rule())
+        return;
+
+    // emit rule
+    if (node->rule()->p_func)
+    {
+        SYNTAK_DEBUG_EMIT("EMIT " << node->toString());
+        node->rule()->p_func(node);
+    }
+
+    // emit this rule as parent's subrule
+    if (node->parent())
+    {
+        for (const Rule::SubRule& sr : node->parent()->rule()->subRules())
+        {
+            if (sr.func && sr.name == node->name())
+            {
+                SYNTAK_DEBUG_EMIT(
+                            "EMIT subrule " << node->toString()
+                            << " from " << node->parent()->toString());
+                sr.func(node);
+            }
+        }
+    }
 }
 
 

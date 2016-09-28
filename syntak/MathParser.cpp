@@ -165,6 +165,7 @@ struct MathParser<F>::Private
 
     void init();
     F takeLastValue();
+    QString getFuncName(ParsedNode* n);
 
     F f_modulo(F p1, F p2, const ParsedNode* n);
     F f_divide(F p1, F p2, const ParsedNode* n);
@@ -174,7 +175,10 @@ struct MathParser<F>::Private
 
     bool needsReinit, ignoreZeroDiv;
 
-    QMap<QString, std::function<F(F, F)>> funcsBinary;
+    QMap<QString, std::function<F(F)>> funcs1;
+    QMap<QString, std::function<F(F, F)>> funcs2;
+    QMap<QString, std::function<F(F, F, F)>> funcs3;
+    QMap<QString, std::function<F(F, F, F, F)>> funcs4;
 
     QList<Node> stack;
 };
@@ -208,10 +212,34 @@ void MathParser<F>::setIgnoreDivisionByZero(bool e)
 
 template <typename F>
 void MathParser<F>::addFunction(
+        const QString& n, std::function<F(F)> foo)
+{
+    p_->needsReinit = p_->funcs1.isEmpty();
+    p_->funcs1.insert(n, foo);
+}
+
+template <typename F>
+void MathParser<F>::addFunction(
         const QString& n, std::function<F(F,F)> foo)
 {
-    p_->needsReinit = p_->funcsBinary.isEmpty();
-    p_->funcsBinary.insert(n, foo);
+    p_->needsReinit = p_->funcs2.isEmpty();
+    p_->funcs2.insert(n, foo);
+}
+
+template <typename F>
+void MathParser<F>::addFunction(
+        const QString& n, std::function<F(F,F,F)> foo)
+{
+    p_->needsReinit = p_->funcs3.isEmpty();
+    p_->funcs3.insert(n, foo);
+}
+
+template <typename F>
+void MathParser<F>::addFunction(
+        const QString& n, std::function<F(F,F,F,F)> foo)
+{
+    p_->needsReinit = p_->funcs4.isEmpty();
+    p_->funcs4.insert(n, foo);
 }
 
 
@@ -222,7 +250,11 @@ void MathParser<F>::Private::init()
 
     const bool
             isSigned = TypeTraits<F>::isSigned(),
-            hasBinaryFunc = !funcsBinary.isEmpty();
+            hasFunc1 = !funcs1.isEmpty(),
+            hasFunc2 = !funcs2.isEmpty(),
+            hasFunc3 = !funcs3.isEmpty(),
+            hasFunc4 = !funcs4.isEmpty(),
+            hasFunc2Plus = hasFunc2 | hasFunc3 | hasFunc4;
 
     lex << Token("plus", "+")
         << Token("minus", "-")
@@ -235,10 +267,14 @@ void MathParser<F>::Private::init()
         lex << Token("num", TypeTraits<F>::numberRegex());
     else
         lex << Token("unsigned_num", TypeTraits<F>::numberRegex());
-    if (hasBinaryFunc)
+    // function identifier
+    if (hasFunc1 || hasFunc2Plus)
+    {
+        lex << Token("ident", QRegExp("[A-Za-z_]+"));
+    }
+    if (hasFunc2Plus)
     {
         lex << Token("comma", ",");
-        lex << Token("ident", QRegExp("[A-Za-z_]+"));
     }
 
     Rules rules;
@@ -264,27 +300,49 @@ void MathParser<F>::Private::init()
                                         "expr" , "bclose");
         rules.createAnd("num",          "[op1]", "unsigned_num");
     }
-    if (hasBinaryFunc)
+    if (hasFunc1)
     {
-        rules.createAnd("binary_func",  QStringList()
+        rules.createAnd("func1",  QStringList()
+                        << "ident" << "bopen" << "expr" << "bclose");
+        factorList << "func1";
+    }
+    if (hasFunc2)
+    {
+        rules.createAnd("func2",  QStringList()
                         << "ident" << "bopen" << "expr" << "comma"
                         << "expr" << "bclose");
-        factorList << "binary_func";
+        factorList << "func2";
     }
+    if (hasFunc3)
+    {
+        rules.createAnd("func3",  QStringList()
+                        << "ident" << "bopen" << "expr" << "comma"
+                        << "expr" << "comma" << "expr" << "bclose");
+        factorList << "func3";
+    }
+    if (hasFunc4)
+    {
+        rules.createAnd("func4",  QStringList()
+                        << "ident" << "bopen" << "expr" << "comma"
+                        << "expr" << "comma" << "expr"
+                        << "comma" << "expr" << "bclose");
+        factorList << "func4";
+    }
+
     rules.createOr( "factor",       factorList);
 
     rules.check();
 
+    // ---------- connections -------------
+
     // num in factor
     rules.connect("factor", 0, [=](ParsedNode* n)
     {
-        SYNTAK_DEBUG("EMIT " << n->toString());
         stack << n;
     });
 
     rules.connect("op1_term", [=](ParsedNode* n)
     {
-        SYNTAK_DEBUG("EMIT " << n->toString());
         F p2 = takeLastValue(), p1 = takeLastValue();
         if (n->text().startsWith("+"))
             stack << Node(p1 + p2);
@@ -308,7 +366,6 @@ void MathParser<F>::Private::init()
         // sign of quoted expression
         rules.connect("quoted_expr", [=](ParsedNode* n)
         {
-            SYNTAK_DEBUG("EMIT " << n->toString());
             // if expression is negative:
             // pop last value (evaluated result of quoted expression)
             // and push back negative
@@ -318,29 +375,67 @@ void MathParser<F>::Private::init()
             }
         });
     }
-    if (hasBinaryFunc)
+
+    if (hasFunc1)
+    rules.connect("func1", [=](ParsedNode* n)
     {
-        rules.connect("binary_func", [=](ParsedNode* n)
-        {
-            SYNTAK_DEBUG("EMIT " << n->toString());
-            if (n->children().empty())
-                SYNTAK_ERROR("Expected identifier node in "
-                             "binary_func node");
-            if (n->children()[0]->name() != "ident")
-                SYNTAK_ERROR("Expected identifier node in "
-                             "binary_func node, got "
-                             << n->children()[0]->name());
-            QString func = n->children()[0]->text();
-            if (!funcsBinary.contains(func))
-                SYNTAK_ERROR("Unknown function '" << func << "' at "
-                             << n->pos().toString());
-            F p2 = takeLastValue(), p1 = takeLastValue();
-            stack << Node(funcsBinary.value(func)(p1, p2));
-        });
-    }
+        QString func = getFuncName(n);
+        if (!funcs1.contains(func))
+            SYNTAK_ERROR("Unknown function '" << func << "' at "
+                         << n->pos().toString());
+        F p1 = takeLastValue();
+        stack << Node(funcs1.value(func)(p1));
+    });
+
+    if (hasFunc2)
+    rules.connect("func2", [=](ParsedNode* n)
+    {
+        QString func = getFuncName(n);
+        if (!funcs2.contains(func))
+            SYNTAK_ERROR("Unknown function '" << func << "' at "
+                         << n->pos().toString());
+        F p2 = takeLastValue(), p1 = takeLastValue();
+        stack << Node(funcs2.value(func)(p1, p2));
+    });
+
+    if (hasFunc3)
+    rules.connect("func3", [=](ParsedNode* n)
+    {
+        QString func = getFuncName(n);
+        if (!funcs3.contains(func))
+            SYNTAK_ERROR("Unknown function '" << func << "' at "
+                         << n->pos().toString());
+        F p3 = takeLastValue(), p2 = takeLastValue(), p1 = takeLastValue();
+        stack << Node(funcs3.value(func)(p1, p2, p3));
+    });
+
+    if (hasFunc4)
+    rules.connect("func4", [=](ParsedNode* n)
+    {
+        QString func = getFuncName(n);
+        if (!funcs4.contains(func))
+            SYNTAK_ERROR("Unknown function '" << func << "' at "
+                         << n->pos().toString());
+        F p4 = takeLastValue(), p3 = takeLastValue(),
+          p2 = takeLastValue(), p1 = takeLastValue();
+        stack << Node(funcs4.value(func)(p1, p2, p3, p4));
+    });
 
     parser.setTokens(lex);
     parser.setRules(rules);
+}
+
+template <typename F>
+QString MathParser<F>::Private::getFuncName(ParsedNode* n)
+{
+    if (n->children().empty())
+        SYNTAK_ERROR("Expected identifier node in "
+                     "binary_func node");
+    if (n->children()[0]->name() != "ident")
+        SYNTAK_ERROR("Expected identifier node in "
+                     "binary_func node, got "
+                     << n->children()[0]->name());
+    return n->children()[0]->text();
 }
 
 template <typename F>

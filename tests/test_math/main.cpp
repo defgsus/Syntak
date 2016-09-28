@@ -24,6 +24,8 @@ SOFTWARE.
 
 ****************************************************************************/
 
+#include <cmath>
+
 #include <QString>
 #include <QtTest>
 #include <QTime>
@@ -83,6 +85,7 @@ private slots:
     void testUInt();
     void testInt();
     void testDouble();
+    void testFunctions();
     void testBigRandomExpressionsUInt();
     void testBigRandomExpressionsInt();
     void testBigRandomExpressionsDouble();
@@ -262,6 +265,29 @@ void SyntakTestMath::testDouble()
     SYNTAK__COMP( 3*-(-(2)) );
     SYNTAK__COMP( 3*-(2+-(4+-(5+-6))) );
     SYNTAK__COMP( -(3+4+5) );
+
+#undef SYNTAK__COMP
+#undef SYNTAK__COMP_VAR
+}
+
+void SyntakTestMath::testFunctions()
+{
+    typedef double T;
+#define SYNTAK__COMP(expr__) \
+    { T res = p.evaluate(#expr__); \
+      PRINT(p.parser().numNodesVisited() << " nodes in " \
+            << p.parser().text() << " = " << res); \
+      QCOMPARE(res, T(expr__)); }
+
+
+    MathParser<double> p;
+    p.addFunction("sin", [](T a){ return std::sin(a); });
+    p.addFunction("pow", [](T a, T b){ return std::pow(a, b); });
+
+    using namespace std;
+
+    SYNTAK__COMP( sin(3.14159265) );
+    SYNTAK__COMP( pow(2., 3.) );
 
 #undef SYNTAK__COMP
 #undef SYNTAK__COMP_VAR

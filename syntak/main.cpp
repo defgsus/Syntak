@@ -79,12 +79,15 @@ void math()
     using namespace Syntak;
 
     MathParser<T> p;
-    p.addFunction("pow", [](T a, T b) { return std::pow(a, b); });
+    //p.addFunction("sin", [](T a) { return std::sin(a); });
+    //p.addFunction("pow", [](T a, T b) { return std::pow(a, b); });
 
+    T res = p.evaluate("1+2");
     //T res = p.evaluate("3*-(2+-(4+-(5+-6)))");
     //T res = p.evaluate("-(4)");
     //T res = p.evaluate("-(3+4+5)");
-    T res = p.evaluate("pow(pow(2,3), 2)");
+    //T res = p.evaluate("pow(pow(2,3), 2)");
+    //T res = p.evaluate("sin(3.14)");
     PRINT("'" << p.expression() << "' = " << res);
 }
 
