@@ -177,7 +177,7 @@ public:
 
         delete rootNode;
         rootNode = parser.parse(text);
-        PRINT(rootNode->toBracketString());
+        PRINT("\n" << rootNode->toBracketString(true));
         //printNodes();
     }
 

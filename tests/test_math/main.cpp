@@ -170,6 +170,7 @@ void SyntakTestMath::testBasic()
     SYNTAK__COMP( 6/3 );
 
     SYNTAK__COMP( 1+2*3 );
+    return;
     SYNTAK__COMP( 1-6/3 );
     SYNTAK__COMP( (1+2)*3 );
     SYNTAK__COMP( 1+2+3+4+5+6+7*8*9 );

@@ -37,37 +37,34 @@ class Parser
 {
 public:
     Parser();
+    ~Parser();
 
-    const Rules& rules() const { return p_rules; }
-    Rules& rules() { return p_rules; }
-    const Tokenizer& tokenizer() const { return p_lexer; }
+    // ---- getter ----
 
-    void setRules(const Rules& r) { p_rules = r; p_rules.check(); }
-    void setTokens(const Tokens& t) { p_lexer.setTokens(t); }
+    const Rules& rules() const;
+    const Tokenizer& tokenizer() const;
+    int numNodesVisited() const;
+    const QString& text() const;
+
+    // ---- setter ----
+
+    void setRules(const Rules& r);
+    void setTokens(const Tokens& t);
+
+    Rules& rules();
+
+    // ---- parsing ----
 
     ParsedNode* parse(const QString& text);
-    int numNodesVisited() const { return p_visited; }
-    const QString& text() const { return p_text; }
-    bool parseRule(ParsedNode* node, int subIdx=-1);
-    bool parseRule_(ParsedNode* node);
 
-    const ParsedToken& curToken() const { return p_look; }
-    bool forward();
-    void setPos(size_t);
-    void pushPos() { p_posStack.push_back(p_lookPos); }
-    void popPos();
-    size_t lengthSince(size_t sourcePos) const;
+    ParsedNode* reduceTree(const ParsedNode* root);
 
     static Parser createYabnfParser();
 
 private:
-    Rules p_rules;
-    Tokenizer p_lexer;
-    QString p_text;
-    std::vector<size_t> p_posStack;
-    ParsedToken p_look;
-    size_t p_lookPos;
-    int p_level, p_visited;
+
+    struct Private;
+    Private* p_;
 };
 
 
@@ -96,7 +93,7 @@ public:
     int numChildLevels() const;
 
     QString toString() const;
-    QString toBracketString() const;
+    QString toBracketString(bool withLineBeaks = false) const;
 
 private:
     friend class Parser;

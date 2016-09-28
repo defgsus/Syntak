@@ -78,20 +78,47 @@ QString ParsedNode::text() const
     return p_parser->text().mid(pos().pos(), length());
 }
 
-QString ParsedNode::toBracketString() const
+namespace {
+
+QString toBracketStringWithLineBreaks(
+        const ParsedNode* n, const QString& indent)
+{
+    if (!n->isValid())
+        return QString("*INVALID*");
+
+    QString s = indent + n->name();
+    if (!n->children().empty())
+    {
+        s += " {\n";
+        for (auto c : n->children())
+            s += toBracketStringWithLineBreaks(c, indent + " ");
+        s += indent + "}";
+    }
+    s += "\n";
+    return s;
+}
+
+} // namespace
+
+QString ParsedNode::toBracketString(bool lineBreaks) const
 {
     if (!isValid())
-        return QString("INVALID");
+        return QString("*INVALID*");
 
-    QString s = name();
-    if (!children().empty())
+    if (!lineBreaks)
     {
-        s += "{";
-        for (auto c : children())
-            s += " " + c->toBracketString();
-        s += " }";
+        QString s = name();
+        if (!children().empty())
+        {
+            s += "{";
+            for (auto c : children())
+                s += " " + c->toBracketString();
+            s += " }";
+        }
+        return s;
     }
-    return s;
+    else
+        return toBracketStringWithLineBreaks(this, "");
 }
 
 void ParsedNode::p_add(ParsedNode *n)
@@ -106,13 +133,8 @@ void ParsedNode::p_add(const std::vector<ParsedNode*>& nodes)
         p_add(n);
 }
 
-Parser::Parser()
-    : p_lookPos     (0)
-    , p_level       (0)
-    , p_visited     (0)
-{
 
-}
+// ####################### Parser ##############################
 
 namespace
 {
@@ -127,7 +149,62 @@ namespace
 
 }
 
-bool Parser::forward()
+struct Parser::Private
+{
+    Private(Parser* p)
+        : p         (p)
+        , p_lookPos     (0)
+        , p_level       (0)
+        , p_visited     (0)
+    {
+
+    }
+
+    void clear();
+    ParsedNode* parse(const QString& text);
+    bool parseRule(ParsedNode* node, int subIdx=-1);
+    bool parseRuleImpl(ParsedNode* node);
+
+    const ParsedToken& curToken() const { return p_look; }
+    bool forward();
+    void setPos(size_t);
+    size_t lengthSince(size_t sourcePos) const;
+
+    Parser* p;
+    Rules p_rules;
+    Tokenizer p_lexer;
+    QString p_text;
+    ParsedToken p_look;
+    size_t p_lookPos;
+    int p_level, p_visited;
+};
+
+
+
+Parser::Parser()
+    : p_        (new Private(this))
+{
+
+}
+
+Parser::~Parser()
+{
+    p_->clear();
+    delete p_;
+}
+
+const Rules& Parser::rules() const { return p_->p_rules; }
+Rules& Parser::rules() { return p_->p_rules; }
+const Tokenizer& Parser::tokenizer() const { return p_->p_lexer; }
+int Parser::numNodesVisited() const { return p_->p_visited; }
+const QString& Parser::text() const { return p_->p_text; }
+
+void Parser::setRules(const Rules& r)
+    { p_->p_rules = r; p_->p_rules.check(); }
+void Parser::setTokens(const Tokens& t) { p_->p_lexer.setTokens(t); }
+
+
+bool Parser::Private::forward()
 {
     if (++p_lookPos >= p_lexer.parsedTokens().size())
     {
@@ -138,16 +215,7 @@ bool Parser::forward()
     return true;
 }
 
-void Parser::popPos()
-{
-    if (p_posStack.empty())
-        return;
-    p_lookPos = p_posStack.back();
-    p_posStack.pop_back();
-    setPos(p_lookPos);
-}
-
-void Parser::setPos(size_t p)
+void Parser::Private::setPos(size_t p)
 {
     p_lookPos = p;
     p_look = p_lookPos < p_lexer.parsedTokens().size()
@@ -155,23 +223,32 @@ void Parser::setPos(size_t p)
             : ParsedToken();
 }
 
-ParsedNode* Parser::parse(const QString &text)
+void Parser::Private::clear()
 {
     p_lookPos = 0;
     p_level = 0;
     p_visited = 0;
+}
+
+ParsedNode* Parser::parse(const QString &text)
+{
+    return p_->parse(text);
+}
+
+ParsedNode* Parser::Private::parse(const QString &text)
+{
+    clear();
     p_text = text;
     p_lexer.tokenize(p_text);
     setPos(0);
 
     P_DEBUG("LEXED: " << p_lexer.toString());
 
-
     if (!p_rules.topRule())
         PARSE_ERROR("No top-level rule defined");
 
     auto node = new ParsedNode();
-    node->p_parser = this;
+    node->p_parser = p;
     node->p_rule = p_rules.topRule();
     if (!parseRule(node))
         PARSE_ERROR("No top-level statement in source '"
@@ -180,7 +257,7 @@ ParsedNode* Parser::parse(const QString &text)
     return node;
 }
 
-size_t Parser::lengthSince(size_t oldPos) const
+size_t Parser::Private::lengthSince(size_t oldPos) const
 {
     size_t curPos = curToken().isValid() ? curToken().pos().pos()
                                          : p_text.size();
@@ -191,7 +268,7 @@ size_t Parser::lengthSince(size_t oldPos) const
     return curPos - oldPos;
 }
 
-bool Parser::parseRule(ParsedNode* node, int subIdx)
+bool Parser::Private::parseRule(ParsedNode* node, int subIdx)
 {
     if (!curToken().isValid() || curToken().name() == "EOF")
         return false;
@@ -199,12 +276,12 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
     LevelInc linc(&p_level);
 
     P_DEBUG(node->rule()->toString() << " ("
-            << "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
+            << "\t\"" << p_text.mid(curToken().pos().pos(), 4) << "\""
             << " " << subIdx
             );
     auto oldPos = curToken().pos();
 
-    bool ret = parseRule_(node);
+    bool ret = parseRuleImpl(node);
     P_DEBUG(") " << node->rule()->toString() << " =" << ret
             //<< "\t\"" << p_text.mid(curToken().pos().pos()) << "\""
             );
@@ -220,7 +297,7 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
     // emit subrules
     if (emitSub)
     {
-        P_DEBUG("EMIT " << node->toString());
+        P_DEBUG("--> EMIT " << node->toString());
         node->p_isEmitted = true;
         parent->rule()->subRules()[subIdx].func(node);
     }
@@ -228,7 +305,7 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
     // emit rule
     if (emitMain)
     {
-        P_DEBUG("EMIT " << node->toString());
+        P_DEBUG("--> EMIT " << node->toString());
         node->p_isEmitted = true;
         node->rule()->p_func(node);
     }
@@ -237,7 +314,7 @@ bool Parser::parseRule(ParsedNode* node, int subIdx)
     return ret;
 }
 
-bool Parser::parseRule_(ParsedNode* node)
+bool Parser::Private::parseRuleImpl(ParsedNode* node)
 {
     switch (node->rule()->type())
     {
@@ -262,7 +339,7 @@ bool Parser::parseRule_(ParsedNode* node)
 
                 auto subnode = new ParsedNode();
                 subNodes.push_back(subnode);
-                subnode->p_parser = this;
+                subnode->p_parser = p;
                 subnode->p_rule = sub.rule;
                 subnode->p_pos = curToken().pos();
                 subnode->p_parent = node;
@@ -291,7 +368,7 @@ bool Parser::parseRule_(ParsedNode* node)
                         while (true)
                         {
                             auto subnode = new ParsedNode();
-                            subnode->p_parser = this;
+                            subnode->p_parser = p;
                             subnode->p_rule = sub.rule;
                             subnode->p_pos = curToken().pos();
                             subnode->p_parent = node;
@@ -326,7 +403,7 @@ bool Parser::parseRule_(ParsedNode* node)
                 setPos(pos);
 
                 auto subnode = new ParsedNode();
-                subnode->p_parser = this;
+                subnode->p_parser = p;
                 subnode->p_rule = sub.rule;
                 subnode->p_pos = curToken().pos();
                 subnode->p_parent = node;
@@ -409,3 +486,12 @@ bool Parser::parseRule_(ParsedNode* node)
 
     return false;
 }
+
+
+
+ParsedNode* Parser::reduceTree(const ParsedNode* root)
+{
+    (void)root;
+    return nullptr;
+}
+
