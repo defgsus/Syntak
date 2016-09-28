@@ -97,10 +97,10 @@ private slots:
     void testInt();
     void testDouble();
     void testFunctions();
-    void testBigRandomExpressionsDoubleFuncs();
     void testBigRandomExpressionsUInt();
     void testBigRandomExpressionsInt();
     void testBigRandomExpressionsDouble();
+    void testBigRandomExpressionsDoubleFuncs();
     void testAdvanced();
 };
 
@@ -371,13 +371,13 @@ void SyntakTestMath::testBigRandomExpressionsImpl(
     try
     {
         /*
-        p.evaluate("1");
+        p.init();
         PRINT("RULES:\n" << p.parser().rules().toDefinitionString());
         PRINT("TOP-LEVEL: " << p.parser().rules().topRule()->toString());
         */
 
         QStringList exps;
-        for (int i=0; i<10; ++i)
+        for (int i=0; i<100; ++i)
             exps << randomExpression(asFloat, 10, 50, p);
 
         p.setIgnoreDivisionByZero(true);

@@ -42,6 +42,12 @@ public:
 
     MathParser& operator=(const MathParser&);
 
+    /** Optional initialization.
+        Normally the first call to evaluate() will initialize
+        everything. If you want to access the Parser internals
+        then call init() first. */
+    void init();
+
     T evaluate(const QString& expression);
 
 

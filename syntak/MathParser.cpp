@@ -166,6 +166,7 @@ struct MathParser<F>::Private
     void init();
     F takeLastValue();
     QString getFuncName(ParsedNode* n);
+    F getFuncValue(const QString& name, int numAgrs, const ParsedNode* n);
 
     F f_modulo(F p1, F p2, const ParsedNode* n);
     F f_divide(F p1, F p2, const ParsedNode* n);
@@ -286,17 +287,24 @@ QStringList MathParser<F>::getFunctionNames(size_t numArguments) const
 }
 
 template <typename F>
+void MathParser<F>::init()
+{
+    p_->init();
+    p_->needsReinit = false;
+}
+
+
+template <typename F>
 void MathParser<F>::Private::init()
 {
     Tokens lex;
 
     const bool
             isSigned = TypeTraits<F>::isSigned(),
-            hasFunc1 = !funcs1.isEmpty(),
-            hasFunc2 = !funcs2.isEmpty(),
-            hasFunc3 = !funcs3.isEmpty(),
-            hasFunc4 = !funcs4.isEmpty(),
-            hasFunc2Plus = hasFunc2 | hasFunc3 | hasFunc4;
+            hasFuncs = !funcs1.isEmpty()
+                    || !funcs2.isEmpty()
+                    || !funcs3.isEmpty()
+                    || !funcs4.isEmpty();
 
     lex << Token("plus", "+")
         << Token("minus", "-")
@@ -309,13 +317,11 @@ void MathParser<F>::Private::init()
         lex << Token("num", TypeTraits<F>::numberRegex());
     else
         lex << Token("unsigned_num", TypeTraits<F>::numberRegex());
-    // function identifier
-    if (hasFunc1 || hasFunc2Plus)
+    if (hasFuncs)
     {
+        // function identifier
         lex << Token("ident", QRegExp("[A-Za-z_][A-Za-z0-9_]*"));
-    }
-    if (hasFunc2Plus)
-    {
+        // comma for argument list
         lex << Token("comma", ",");
     }
 
@@ -342,36 +348,17 @@ void MathParser<F>::Private::init()
                                         "expr" , "bclose");
         rules.createAnd("num",          "[op1]", "unsigned_num");
     }
-    if (hasFunc1)
+    if (hasFuncs)
     {
-        rules.createAnd("func1",  QStringList()
-                        << "ident" << "bopen" << "expr" << "bclose");
-        factorList << "func1";
-    }
-    if (hasFunc2)
-    {
-        rules.createAnd("func2",  QStringList()
-                        << "ident" << "bopen" << "expr" << "comma"
-                        << "expr" << "bclose");
-        factorList << "func2";
-    }
-    if (hasFunc3)
-    {
-        rules.createAnd("func3",  QStringList()
-                        << "ident" << "bopen" << "expr" << "comma"
-                        << "expr" << "comma" << "expr" << "bclose");
-        factorList << "func3";
-    }
-    if (hasFunc4)
-    {
-        rules.createAnd("func4",  QStringList()
-                        << "ident" << "bopen" << "expr" << "comma"
-                        << "expr" << "comma" << "expr"
-                        << "comma" << "expr" << "bclose");
-        factorList << "func4";
+        rules.createAnd("arg_list",     "expr", "[comma_expr]*");
+        rules.createAnd("comma_expr",   "comma", "expr");
+
+        rules.createAnd("func",         "ident", "bopen",
+                                        "arg_list", "bclose");
+        factorList << "func";
     }
 
-    rules.createOr( "factor",       factorList);
+    rules.createOr ("factor",           factorList);
 
     rules.check();
 
@@ -418,50 +405,52 @@ void MathParser<F>::Private::init()
         });
     }
 
-    if (hasFunc1)
-    rules.connect("func1", [=](ParsedNode* n)
+    // getting the arguments works as follows:
+    // arg_list will emit it's first argument which is 'expr'
+    // and the optional following arguments as 'comma_expr'
+    // once 'func' is emitted, we walk backwards in the stack
+    // until the first 'expr' and count the instances of
+    // 'comma_expr' to get the number of arguments
+    // all 'expr' and 'comma_expr' are removed from stack
+    // because their values are stored in factor's 'num' emits.
+    if (hasFuncs)
     {
-        QString func = getFuncName(n);
-        if (!funcs1.contains(func))
-            SYNTAK_ERROR("Unknown function '" << func << "' at "
-                         << n->pos().toString());
-        F p1 = takeLastValue();
-        stack << Node(funcs1.value(func)(p1));
-    });
+        // expr in arg_list
+        rules.connect("arg_list", 0, [=](ParsedNode* n)
+        {
+            stack << n;
+        });
 
-    if (hasFunc2)
-    rules.connect("func2", [=](ParsedNode* n)
-    {
-        QString func = getFuncName(n);
-        if (!funcs2.contains(func))
-            SYNTAK_ERROR("Unknown function '" << func << "' at "
-                         << n->pos().toString());
-        F p2 = takeLastValue(), p1 = takeLastValue();
-        stack << Node(funcs2.value(func)(p1, p2));
-    });
+        // comma_expr in arg_list
+        rules.connect("arg_list", 1, [=](ParsedNode* n)
+        {
+            stack << n;
+        });
 
-    if (hasFunc3)
-    rules.connect("func3", [=](ParsedNode* n)
-    {
-        QString func = getFuncName(n);
-        if (!funcs3.contains(func))
-            SYNTAK_ERROR("Unknown function '" << func << "' at "
-                         << n->pos().toString());
-        F p3 = takeLastValue(), p2 = takeLastValue(), p1 = takeLastValue();
-        stack << Node(funcs3.value(func)(p1, p2, p3));
-    });
-
-    if (hasFunc4)
-    rules.connect("func4", [=](ParsedNode* n)
-    {
-        QString func = getFuncName(n);
-        if (!funcs4.contains(func))
-            SYNTAK_ERROR("Unknown function '" << func << "' at "
-                         << n->pos().toString());
-        F p4 = takeLastValue(), p3 = takeLastValue(),
-          p2 = takeLastValue(), p1 = takeLastValue();
-        stack << Node(funcs4.value(func)(p1, p2, p3, p4));
-    });
+        rules.connect("func", [=](ParsedNode* n)
+        {
+            int numArgs = 1;
+            for (int i=stack.size()-1; i>=0; --i)
+            {
+                if (!stack[i].node)
+                    continue;
+                // Note: We don't use 'expr' as emitter anywhere
+                // else so it's save to use it as stop symbol..
+                if (stack[i].node->name() == "expr")
+                {
+                    stack.removeAt(i);
+                    break;
+                }
+                if (stack[i].node->name() == "comma_expr")
+                {
+                    stack.removeAt(i);
+                    ++numArgs;
+                }
+            }
+            QString func = getFuncName(n);
+            stack << Node(getFuncValue(func, numArgs, n));
+        });
+    }
 
     parser.setTokens(lex);
     parser.setRules(rules);
@@ -478,6 +467,44 @@ QString MathParser<F>::Private::getFuncName(ParsedNode* n)
                      "binary_func node, got "
                      << n->children()[0]->name());
     return n->children()[0]->text();
+}
+
+template <typename F>
+F MathParser<F>::Private::getFuncValue(
+        const QString& name, int num, const ParsedNode* n)
+{
+    if ((num == 1 && !funcs1.contains(name))
+     || (num == 2 && !funcs2.contains(name))
+     || (num == 3 && !funcs3.contains(name))
+     || (num == 4 && !funcs4.contains(name))
+            )
+        SYNTAK_ERROR("Unknown " << num << "-argument function '"
+                     << name << "' at " << n->pos().toString());
+    if (num == 1)
+    {
+        F p1 = takeLastValue();
+        return funcs1.value(name)(p1);
+    }
+    else if (num == 2)
+    {
+        F p2 = takeLastValue(), p1 = takeLastValue();
+        return funcs2.value(name)(p1, p2);
+    }
+    else if (num == 3)
+    {
+        F p3 = takeLastValue(), p2 = takeLastValue(),
+          p1 = takeLastValue();
+        return funcs3.value(name)(p1, p2, p3);
+    }
+    else if (num == 4)
+    {
+        F p4 = takeLastValue(), p3 = takeLastValue(),
+          p2 = takeLastValue(), p1 = takeLastValue();
+        return funcs4.value(name)(p1, p2, p3, p4);
+    }
+
+    SYNTAK_ERROR(num << "-argument functions not supported");
+    return 0;
 }
 
 template <typename F>
