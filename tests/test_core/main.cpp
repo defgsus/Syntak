@@ -80,6 +80,8 @@ public:
 
 private slots:
 
+    void testCopy();
+
     void testTokenizerSingle();
     void testTokenizerMulti();
     void testTokenizerRegex();
@@ -88,6 +90,26 @@ private slots:
 
 };
 
+void SyntakTestCore::testCopy()
+{
+    Rules rules;
+    rules.createAnd("some", "other");
+    rules.createOr("other", "tok1", "tok2");
+    rules.createToken(Token("tok1", "1"));
+    rules.createToken(Token("tok2", "2"));
+
+    Parser p1, p2;
+
+    p1.setRules(rules);
+
+    p2 = p1;
+
+    QCOMPARE(p1.rules().toDefinitionString(), QString(
+             "tok1 : \"1\"\ntok2 : \"2\"\nother : tok1 | tok2\n"
+             "some : other"));
+    QCOMPARE(p1.rules().toDefinitionString(),
+             p2.rules().toDefinitionString());
+}
 
 
 void SyntakTestCore::testTokenizerSingle()

@@ -38,7 +38,10 @@ class Parser
 {
 public:
     Parser();
+    Parser(const Parser&);
     ~Parser();
+
+    Parser& operator=(const Parser&);
 
     // ---- getter ----
 

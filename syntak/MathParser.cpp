@@ -192,9 +192,24 @@ MathParser<F>::MathParser()
 }
 
 template <typename F>
+MathParser<F>::MathParser(const MathParser& o)
+    : MathParser()
+{
+    *this = o;
+}
+
+template <typename F>
 MathParser<F>::~MathParser()
 {
     delete p_;
+}
+
+template <typename F>
+MathParser<F>& MathParser<F>::operator =(const MathParser& o)
+{
+    *p_ = *o.p_;
+    p_->p = this;
+    return *this;
 }
 
 template <typename F>
@@ -214,7 +229,7 @@ template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F)> foo)
 {
-    p_->needsReinit = p_->funcs1.isEmpty();
+    p_->needsReinit |= p_->funcs1.isEmpty();
     p_->funcs1.insert(n, foo);
 }
 
@@ -222,7 +237,7 @@ template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F,F)> foo)
 {
-    p_->needsReinit = p_->funcs2.isEmpty();
+    p_->needsReinit |= p_->funcs2.isEmpty();
     p_->funcs2.insert(n, foo);
 }
 
@@ -230,7 +245,7 @@ template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F,F,F)> foo)
 {
-    p_->needsReinit = p_->funcs3.isEmpty();
+    p_->needsReinit |= p_->funcs3.isEmpty();
     p_->funcs3.insert(n, foo);
 }
 
@@ -238,10 +253,37 @@ template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F,F,F,F)> foo)
 {
-    p_->needsReinit = p_->funcs4.isEmpty();
+    p_->needsReinit |= p_->funcs4.isEmpty();
     p_->funcs4.insert(n, foo);
 }
 
+template <typename F>
+bool MathParser<F>::hasFunctions() const
+{
+    return !p_->funcs1.isEmpty()
+        || !p_->funcs2.isEmpty()
+        || !p_->funcs3.isEmpty()
+        || !p_->funcs4.isEmpty();
+}
+
+template <typename F>
+QStringList MathParser<F>::getFunctionNames(size_t numArguments) const
+{
+    QStringList list;
+    switch (numArguments)
+    {
+        case 1: for (auto i=p_->funcs1.begin(); i!=p_->funcs1.end(); ++i)
+            list << i.key(); break;
+        case 2: for (auto i=p_->funcs2.begin(); i!=p_->funcs2.end(); ++i)
+            list << i.key(); break;
+        case 3: for (auto i=p_->funcs3.begin(); i!=p_->funcs3.end(); ++i)
+            list << i.key(); break;
+        case 4: for (auto i=p_->funcs4.begin(); i!=p_->funcs4.end(); ++i)
+            list << i.key(); break;
+    }
+
+    return list;
+}
 
 template <typename F>
 void MathParser<F>::Private::init()
@@ -270,7 +312,7 @@ void MathParser<F>::Private::init()
     // function identifier
     if (hasFunc1 || hasFunc2Plus)
     {
-        lex << Token("ident", QRegExp("[A-Za-z_]+"));
+        lex << Token("ident", QRegExp("[A-Za-z_][A-Za-z0-9_]*"));
     }
     if (hasFunc2Plus)
     {

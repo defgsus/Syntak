@@ -72,13 +72,24 @@ class SyntakTestMath : public QObject
 public:
     SyntakTestMath() { }
 
-    static QString randomExpression(bool asFloat,
-            int minRecurseLevel, int maxRecurseLevel);
-    static QString randomTerm(int recursionLevel, bool asFloat);
-    static QString randomFactor(int recursionLevel, bool asFloat);
+    template <typename T>
+    static QString randomExpression(
+            bool asFloat,
+            int minRecurseLevel, int maxRecurseLevel,
+            const MathParser<T>& p);
+    template <typename T>
+    static QString randomTerm(
+            int recursionLevel, bool asFloat,
+            const MathParser<T>& p);
+    template <typename T>
+    static QString randomFactor(
+            int recursionLevel, bool asFloat,
+            const MathParser<T>& p);
 
     template <typename T>
-    void testBigRandomExpressionsImpl(bool asFloat);
+    void testBigRandomExpressionsImpl(
+            bool asFloat,
+            MathParser<T> p = MathParser<T>());
 
 private slots:
 
@@ -86,37 +97,58 @@ private slots:
     void testInt();
     void testDouble();
     void testFunctions();
+    void testBigRandomExpressionsDoubleFuncs();
     void testBigRandomExpressionsUInt();
     void testBigRandomExpressionsInt();
     void testBigRandomExpressionsDouble();
     void testAdvanced();
 };
 
-
+template <typename T>
 QString SyntakTestMath::randomExpression(bool asFloat,
-        int minLevel, int maxLevel)
+        int minLevel, int maxLevel, const MathParser<T>& p)
 {
-    return randomTerm(minLevel + (rand()%maxLevel), asFloat);
+    return randomTerm(minLevel + (rand()%maxLevel), asFloat, p);
 }
 
-QString SyntakTestMath::randomTerm(int recursionLevel, bool asFloat)
+template <typename T>
+QString SyntakTestMath::randomTerm(
+        int recursionLevel, bool asFloat, const MathParser<T>& p)
 {
-    QString s = randomFactor(recursionLevel, asFloat);
-    for (int i=0; i<rand()%5; ++i)
+    if (!p.hasFunctions() || rand()%10 < 6)
     {
-        switch (rand()%4)
+        QString s = randomFactor(recursionLevel, asFloat, p);
+        for (int i=0; i<rand()%5; ++i)
         {
-            case 0: s += "+"; break;
-            case 1: s += "-"; break;
-            case 2: s += "*"; break;
-            case 3: s += "/"; break;
+            switch (rand()%4)
+            {
+                case 0: s += "+"; break;
+                case 1: s += "-"; break;
+                case 2: s += "*"; break;
+                case 3: s += "/"; break;
+            }
+            s += randomFactor(recursionLevel, asFloat, p);
         }
-        s += randomFactor(recursionLevel, asFloat);
+        return s;
     }
-    return s;
+    else
+    {
+        int count = 1 + rand()%4;
+        QStringList funcs = p.getFunctionNames(count);
+        if (funcs.isEmpty())
+            return randomFactor(recursionLevel, asFloat, p);
+        QString s = funcs[rand()%funcs.size()];
+        s += "(" + randomFactor(recursionLevel, asFloat, p);
+        for (int i=1; i < count; ++i)
+            s += "," + randomFactor(recursionLevel, asFloat, p);
+        s += ")";
+        return s;
+    }
 }
 
-QString SyntakTestMath::randomFactor(int recursionLevel, bool asFloat)
+template <typename T>
+QString SyntakTestMath::randomFactor(
+        int recursionLevel, bool asFloat, const MathParser<T>& p)
 {
     if (recursionLevel < 1 || rand() % 10 == 0)
     {
@@ -133,7 +165,7 @@ QString SyntakTestMath::randomFactor(int recursionLevel, bool asFloat)
                     .arg(1 + rand()%20);
         return s;
     }
-    return "(" + randomTerm(rand()%recursionLevel, asFloat) + ")";
+    return "(" + randomTerm(rand()%recursionLevel, asFloat, p) + ")";
 }
 
 
@@ -266,6 +298,8 @@ void SyntakTestMath::testDouble()
     SYNTAK__COMP( 3*-(2+-(4+-(5+-6))) );
     SYNTAK__COMP( -(3+4+5) );
 
+    SYNTAK__COMP( 199.120581e+18/-526+(76) );
+
 #undef SYNTAK__COMP
 #undef SYNTAK__COMP_VAR
 }
@@ -273,21 +307,24 @@ void SyntakTestMath::testDouble()
 void SyntakTestMath::testFunctions()
 {
     typedef double T;
-#define SYNTAK__COMP(expr__) \
+#define SYNTAK__COMP(expr__, cexpr__) \
     { T res = p.evaluate(#expr__); \
       PRINT(p.parser().numNodesVisited() << " nodes in " \
             << p.parser().text() << " = " << res); \
-      QCOMPARE(res, T(expr__)); }
+      QCOMPARE(res, T(cexpr__)); }
 
 
     MathParser<double> p;
     p.addFunction("sin", [](T a){ return std::sin(a); });
     p.addFunction("pow", [](T a, T b){ return std::pow(a, b); });
+    p.addFunction("sum", [](T a, T b, T c){ return a + b + c; });
+    p.addFunction("sum", [](T a, T b, T c, T d){ return a + b + c + d; });
 
-    using namespace std;
-
-    SYNTAK__COMP( sin(3.14159265) );
-    SYNTAK__COMP( pow(2., 3.) );
+    SYNTAK__COMP( sin(3.14159265),      std::sin(3.14159265) );
+    SYNTAK__COMP( pow(2, 3),            std::pow(2., 3.) );
+    SYNTAK__COMP( sum(2, 3, 4),         2+3+4 );
+    SYNTAK__COMP( sum(2, 3, 4, 5),      2+3+4+5 );
+    SYNTAK__COMP( sum(2,3,sum(4,5,6)),  2+3+4+5+6 );
 
 #undef SYNTAK__COMP
 #undef SYNTAK__COMP_VAR
@@ -309,40 +346,72 @@ void SyntakTestMath::testBigRandomExpressionsDouble()
     testBigRandomExpressionsImpl<double>(true);
 }
 
-template <typename T>
-void SyntakTestMath::testBigRandomExpressionsImpl(bool asFloat)
+void SyntakTestMath::testBigRandomExpressionsDoubleFuncs()
 {
-    QStringList exps;
-    for (int i=0; i<1000; ++i)
-        exps << randomExpression(asFloat, 10, 50);
-
+    typedef double T;
     MathParser<T> p;
-    p.setIgnoreDivisionByZero(true);
+    p.addFunction("sin", [](T a){ return std::sin(a); });
+    p.addFunction("cos", [](T a){ return std::cos(a); });
+    p.addFunction("floor", [](T a){ return std::floor(a); });
+    p.addFunction("pow", [](T a, T b){ return std::pow(a, b); });
+    p.addFunction("atan2", [](T a, T b){ return std::atan2(a, b); });
+    p.addFunction("sum", [](T a, T b){ return a + b; });
+    p.addFunction("diff", [](T a, T b){ return a - b; });
+    p.addFunction("sum", [](T a, T b, T c){ return a + b + c; });
+    p.addFunction("sum", [](T a, T b, T c, T d){ return a + b + c + d; });
+    p.addFunction("a_sum", [](T a, T b, T c, T d){ return a - b + c - d; });
 
-    QTime time;
-    time.start();
-    size_t numNodesSum = 0, maxNumNodes = 0;
-    QString heavyString;
-    for (auto& exp : exps)
+    testBigRandomExpressionsImpl<T>(true, p);
+}
+
+template <typename T>
+void SyntakTestMath::testBigRandomExpressionsImpl(
+        bool asFloat, MathParser<T> p)
+{
+    try
     {
-        double res = p.evaluate( exp );
-        numNodesSum += p.parser().numNodesVisited();
-        if (p.parser().numNodesVisited() > maxNumNodes)
-            maxNumNodes = p.parser().numNodesVisited(),
-            heavyString = p.parser().text();
-#if 0
-        PRINT(p.parser().numNodesVisited() << " nodes in '"
-              << p.parser().text().left(20) << "...' = " \
-              << res);
-#else
-        Q_UNUSED(res);
-#endif
+        /*
+        p.evaluate("1");
+        PRINT("RULES:\n" << p.parser().rules().toDefinitionString());
+        PRINT("TOP-LEVEL: " << p.parser().rules().topRule()->toString());
+        */
+
+        QStringList exps;
+        for (int i=0; i<10; ++i)
+            exps << randomExpression(asFloat, 10, 50, p);
+
+        p.setIgnoreDivisionByZero(true);
+
+        QTime time;
+        time.start();
+        size_t numNodesSum = 0, maxNumNodes = 0;
+        QString heavyString;
+        for (auto& exp : exps)
+        {
+            double res = p.evaluate( exp );
+            numNodesSum += p.parser().numNodesVisited();
+            if (p.parser().numNodesVisited() > maxNumNodes)
+                maxNumNodes = p.parser().numNodesVisited(),
+                heavyString = p.parser().text();
+    #if 0
+            PRINT(p.parser().numNodesVisited() << " nodes in '"
+                  << p.parser().text().left(20) << "...' = " \
+                  << res);
+    #else
+            Q_UNUSED(res);
+    #endif
+        }
+        int e = time.elapsed();
+        PRINT(size_t(numNodesSum / (0.001*e)) << " nodes per second");
+        PRINT("max number nodes: " << maxNumNodes << " in string of length "
+              << heavyString.size() << ":");
+        PRINT(heavyString.left(60) << "...");
     }
-    int e = time.elapsed();
-    PRINT(size_t(numNodesSum / (0.001*e)) << " nodes per second");
-    PRINT("max number nodes: " << maxNumNodes << " in string of length "
-          << heavyString.size() << ":");
-    PRINT(heavyString.left(60) << "...");
+    catch (SyntakException e)
+    {
+        qWarning() << e.text();
+        QFAIL("Caught exception");
+    }
 }
 
 void SyntakTestMath::testAdvanced()

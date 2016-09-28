@@ -3,6 +3,7 @@
 
 #include "Parser.h"
 #include "MathParser.h"
+#include "error.h"
 
 #define PRINT(arg__) { qDebug().noquote().nospace() << arg__; }
 
@@ -79,33 +80,52 @@ void math()
     using namespace Syntak;
 
     MathParser<T> p;
-    //p.addFunction("sin", [](T a) { return std::sin(a); });
+    p.addFunction("sin", [](T a){ return std::sin(a); });
+    p.addFunction("cos", [](T a){ return std::cos(a); });
+    p.addFunction("floor", [](T a){ return std::floor(a); });
+    p.addFunction("pow", [](T a, T b){ return std::pow(a, b); });
+    p.addFunction("atan2", [](T a, T b){ return std::atan2(a, b); });
+    p.addFunction("sum", [](T a, T b){ return a + b; });
+    p.addFunction("diff", [](T a, T b){ return a - b; });
+    p.addFunction("sum", [](T a, T b, T c){ return a + b + c; });
+    p.addFunction("sum", [](T a, T b, T c, T d){ return a + b + c + d; });
+    p.addFunction("asum", [](T a, T b, T c, T d){ return a - b + c - d; });
+    //p.addFunction("floor", [](T a) { return std::floor(a); });
     //p.addFunction("pow", [](T a, T b) { return std::pow(a, b); });
 
-    T res = p.evaluate("1+2");
+    //T res = p.evaluate("1+2");
     //T res = p.evaluate("3*-(2+-(4+-(5+-6)))");
     //T res = p.evaluate("-(4)");
     //T res = p.evaluate("-(3+4+5)");
     //T res = p.evaluate("pow(pow(2,3), 2)");
-    //T res = p.evaluate("sin(3.14)");
+    T res = p.evaluate("sin(3.14)");
     PRINT("'" << p.expression() << "' = " << res);
 }
 
 
 int main(int, char**)
 {
-    //simple();
-    //yabnf();
-    math<float>();
+    try
+    {
+        //simple();
+        //yabnf();
+        math<float>();
+        //PRINT(bugString.count("(") << " " << bugString.count(")"));
 
-    /*
-    QString s = "aber das '%%hallo'";
-    //QRegExp ident("[A-Za-z][A-Za-z0-9]*");
-    QRegExp ident("'[\x01-\x7f]*'");
-    PRINT("idx=" << ident.indexIn(s));
-    PRINT("len=" << ident.matchedLength());
-    PRINT("'" << s.mid(ident.indexIn(s), ident.matchedLength()) << "'");
-    */
-    return 0;
+        /*
+        QString s = "aber das '%%hallo'";
+        //QRegExp ident("[A-Za-z][A-Za-z0-9]*");
+        QRegExp ident("'[\x01-\x7f]*'");
+        PRINT("idx=" << ident.indexIn(s));
+        PRINT("len=" << ident.matchedLength());
+        PRINT("'" << s.mid(ident.indexIn(s), ident.matchedLength()) << "'");
+        */
+        return 0;
+    }
+    catch (Syntak::SyntakException e)
+    {
+        PRINT(e.text());
+        return -1;
+    }
 }
 

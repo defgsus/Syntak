@@ -28,8 +28,8 @@ SOFTWARE.
 #include "error.h"
 
 #if 0
+#   define SYNTAK_DO_DEBUG
 #   define SYNTAK_DEBUG(arg__) \
-#   define SYNTAK_DO_DEBUG \
         { QString indent__ = p_level ? QString("%1").arg(p_level) \
                                  : QString(" "); \
       indent__ += QString(" ").repeated(p_level+1 - indent__.size()); \
@@ -210,10 +210,23 @@ Parser::Parser()
 
 }
 
+Parser::Parser(const Parser& p)
+    : Parser()
+{
+    *this = p;
+}
+
 Parser::~Parser()
 {
     p_->clear();
     delete p_;
+}
+
+Parser& Parser::operator = (const Parser& p)
+{
+    *p_ = *p.p_;
+    p_->p = this;
+    return *this;
 }
 
 const Rules& Parser::rules() const { return p_->p_rules; }
@@ -303,9 +316,7 @@ bool Parser::Private::parseRule(ParsedNode* node)
     LevelInc linc(&p_level);
 
     SYNTAK_DEBUG(node->rule()->toString() << " ("
-            << "\t\"" << p_text.mid(curToken().pos().pos(), 4) << "\""
-            << " " << subIdx
-            );
+            << "\t\"" << p_text.mid(curToken().pos().pos(), 4) << "\"");
 
     auto oldPos = curToken().pos();
 

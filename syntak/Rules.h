@@ -44,6 +44,8 @@ class ParsedNode;
 class Rule
 {
     Rule() : p_isTop(false) { }
+    Rule(const Rule&) = delete;
+    void operator=(const Rule&) = delete;
 
 public:
     typedef std::function<void(ParsedNode*)> Callback;
@@ -78,7 +80,8 @@ public:
     void connect(int idx, Callback f);
 
     const char* typeName() const {
-        return type() == T_TOKEN ? "term" : type() == T_OR ? "or" : "and"; }
+        return type() == T_TOKEN ? "term"
+                                 : type() == T_OR ? "or" : "and"; }
 
     QString toString() const { return QString("%1(%2)").arg(name())
                                                        .arg(typeName()); }

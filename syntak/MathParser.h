@@ -37,7 +37,10 @@ class MathParser
 public:
 
     MathParser();
+    MathParser(const MathParser&);
     ~MathParser();
+
+    MathParser& operator=(const MathParser&);
 
     T evaluate(const QString& expression);
 
@@ -55,6 +58,9 @@ public:
     void addFunction(const QString& name, std::function<T(T, T, T)>);
     /** Adds a function with 4 arguments to the grammar */
     void addFunction(const QString& name, std::function<T(T, T, T, T)>);
+
+    bool hasFunctions() const;
+    QStringList getFunctionNames(size_t numArguments) const;
 
 private:
     struct Private;
