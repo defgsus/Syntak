@@ -19,12 +19,13 @@ SOURCES += \
     ../../syntak/Tokens.cpp \
     ../../syntak/Rules.cpp \
     ../../syntak/Parser.cpp \
-    main.cpp 
+    ../../syntak/MathParser.cpp \
+    main.cpp
 
 HEADERS += \
     ../../syntak/Tokens.h \
     ../../syntak/Rules.h \
     ../../syntak/Parser.h \
-    MathParser.h \
-    SimpleMathParser.h
+    ../../syntak/MathParser.h \
+    AdvancedMathParser.h
 

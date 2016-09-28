@@ -29,10 +29,9 @@ SOFTWARE.
 #include <QTime>
 
 #include "MathParser.h"
-#include "SimpleMathParser.h"
+#include "AdvancedMathParser.h"
 
-//using namespace Syntak;
-
+using namespace Syntak;
 
 
 namespace QTest {
@@ -78,9 +77,10 @@ public:
 
 private slots:
 
-    void testSimple();
-    void testBasic();
+    void testUInt();
+    void testInt();
     void testBigRandomExpressions();
+    void testAdvanced();
 };
 
 
@@ -118,17 +118,15 @@ QString SyntakTestMath::randomFactor(int recursionLevel)
 
 
 
-void SyntakTestMath::testSimple()
+void SyntakTestMath::testUInt()
 {
 #define SYNTAK__COMP(expr__) \
-    { p.parse(#expr__); \
-      int stack = p.takeLastInt(); \
-      PRINT(p.parser.numNodesVisited() << " nodes in " \
-            << p.parser.text() << " = " << stack); \
-      if (stack != (expr__)) p.print(); \
-      QCOMPARE(stack, (expr__)); }
+    { auto res = p.evaluate(#expr__); \
+      PRINT(p.parser().numNodesVisited() << " nodes in " \
+            << p.parser().text() << " = " << res); \
+      QCOMPARE(res, (decltype(res))(expr__)); }
 
-    SimpleMathParser<int> p;
+    MathParser<uint> p;
     SYNTAK__COMP( 1 );
     SYNTAK__COMP( 123 );
     SYNTAK__COMP( 12345 );
@@ -149,8 +147,64 @@ void SyntakTestMath::testSimple()
 }
 
 
-void SyntakTestMath::testBasic()
+void SyntakTestMath::testInt()
 {
+#define SYNTAK__COMP(expr__) \
+    { int res = p.evaluate(#expr__); \
+      PRINT(p.parser().numNodesVisited() << " nodes in " \
+            << p.parser().text() << " = " << res); \
+      QCOMPARE(res, (expr__)); }
+
+    MathParser<int> p;
+    SYNTAK__COMP( 1 );
+    SYNTAK__COMP( 123 );
+    SYNTAK__COMP( 12345 );
+
+    SYNTAK__COMP( 1+2 );
+    SYNTAK__COMP( 1-2 );
+    SYNTAK__COMP( 2*3 );
+    SYNTAK__COMP( 6/3 );
+
+    SYNTAK__COMP( 1+2*3 );
+    SYNTAK__COMP( 1-6/3 );
+    SYNTAK__COMP( (1+2)*3 );
+    SYNTAK__COMP( 1+2+3+4+5+6+7*8*9 );
+    SYNTAK__COMP( (((((((1+2)*3+4)*5+6)*7+8)*9+10)*11+12)*13+14)*15 );
+
+#undef SYNTAK__COMP
+#undef SYNTAK__COMP_VAR
+}
+
+
+void SyntakTestMath::testBigRandomExpressions()
+{
+    return;
+
+    QStringList exps;
+    for (int i=0; i<1000; ++i)
+        exps << randomExpression(10, 50);
+
+    MathParser<int64_t> p;
+    QTime time;
+    time.start();
+    size_t numNodes = 0;
+    for (auto& exp : exps)
+    {
+        int res = p.evaluate( exp );
+        numNodes += p.parser().numNodesVisited();
+        PRINT(p.parser().numNodesVisited() << " nodes in '"
+              << p.parser().text().left(20) << "...' = " \
+              << res);
+    }
+    int e = time.elapsed();
+    PRINT(size_t(numNodes / (0.001*e)) << " nodes per second");
+}
+
+
+void SyntakTestMath::testAdvanced()
+{
+    return;
+
 #define SYNTAK__COMP_VAR(var__, int__) \
     { if (!p.variables.contains(var__)) \
         { p.print(); SYNTAK_ERROR("variable '" << var__ << "' not found"); } \
@@ -163,7 +217,7 @@ void SyntakTestMath::testBasic()
     PRINT(p.parser.numNodesVisited() << " nodes in '" #expr__ "' = " \
           << p.variables["result"]);
 
-    MathParser p;
+    AdvancedMathParser p;
     SYNTAK__COMP( 1+2 );
     SYNTAK__COMP( 1-2 );
     SYNTAK__COMP( 2*3 );
@@ -187,27 +241,6 @@ void SyntakTestMath::testBasic()
     */
 }
 
-void SyntakTestMath::testBigRandomExpressions()
-{
-    QStringList exps;
-    for (int i=0; i<1000; ++i)
-        exps << randomExpression(10, 50);
-
-    SimpleMathParser<int64_t> p;
-    QTime time;
-    time.start();
-    size_t numNodes = 0;
-    for (auto& exp : exps)
-    {
-        p.parse( exp );
-        numNodes += p.parser.numNodesVisited();
-        PRINT(p.parser.numNodesVisited() << " nodes in '"
-              << p.parser.text().left(20) << "...' = " \
-              << p.takeLastInt());
-    }
-    int e = time.elapsed();
-    PRINT(size_t(numNodes / (0.001*e)) << " nodes per second");
-}
 
 QTEST_APPLESS_MAIN(SyntakTestMath)
 

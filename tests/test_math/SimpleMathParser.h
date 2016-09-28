@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 #ifndef SYNTAKSRC_TESTS_TEST_MATH_SIMPLE_MATHPARSER_H
 #define SYNTAKSRC_TESTS_TEST_MATH_SIMPLE_MATHPARSER_H
 
+#include <QMap>
 #include "Parser.h"
 
 #ifndef PRINT
@@ -53,7 +54,6 @@ public:
     ParsedNode* rootNode;
     QList<ParsedNode*> emits;
     QList<Node> stack;
-    QMap<QString, INT> variables;
 
     void init()
     {

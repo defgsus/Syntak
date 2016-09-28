@@ -20,11 +20,13 @@ SOURCES += \
     Rules.cpp \
     Parser.cpp \
     main.cpp \
-    Parser_yabnf.cpp
+    Parser_yabnf.cpp \
+    MathParser.cpp
 
 HEADERS += \
     Tokens.h \
     Rules.h \
     Parser.h \
-    error.h
+    error.h \
+    MathParser.h
 

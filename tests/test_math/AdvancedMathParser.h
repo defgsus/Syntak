@@ -39,11 +39,11 @@ SOFTWARE.
 
 using namespace Syntak;
 
-class MathParser
+class AdvancedMathParser
 {
 public:
-    MathParser() : rootNode(nullptr) { init(); }
-    ~MathParser() { delete rootNode; }
+    AdvancedMathParser() : rootNode(nullptr) { init(); }
+    ~AdvancedMathParser() { delete rootNode; }
 
     struct Node
     {
