@@ -100,6 +100,7 @@ private slots:
     void testBigRandomDouble();
     void testBigRandomDoubleConstants();
     void testBigRandomDoubleFuncs();
+    void testBigRandomDoubleFuncsConstants();
     void testAdvanced();
 };
 
@@ -151,10 +152,13 @@ QString SyntakTestMath::randomFactor(
 {
     if (recursionLevel < 1 || rand() % 10 == 0)
     {
-        if (!p.constants().isEmpty() && rand() % 6 == 0)
+        if (!p.constants().isEmpty() && rand() % 4 == 0)
         {
             auto keys = p.constants().keys();
-            return keys[rand()%keys.size()];
+            QString s = keys[rand()%keys.size()];
+            if (p.isSigned() && rand()%8 == 0)
+                s.prepend("-");
+            return s;
         }
         QString s = QString("%1").arg(rand()%1000);
         if (p.isSigned() && rand()%8 == 0)
@@ -383,8 +387,9 @@ void SyntakTestMath::testFunctionsAndConstants()
             << p.parser().text() << " = " << res); \
       QCOMPARE(res, T(cexpr__)); }
 
-    const T sin = 3.14;
+    const T sin = 1.5;
 
+    // test name-clash between function and constant identifiers
     MathParser<double> p;
     p.addFunction("sin", [](T a){ return std::sin(a); });
     p.addConstant("sin", sin);
@@ -446,6 +451,34 @@ void SyntakTestMath::testBigRandomDoubleFuncs()
     testBigRandomExpressionsImpl<T>(p);
 }
 
+void SyntakTestMath::testBigRandomDoubleFuncsConstants()
+{
+    typedef double T;
+    MathParser<T> p;
+    p.addFunction("sin", [](T a){ return std::sin(a); });
+    p.addFunction("cos", [](T a){ return std::cos(a); });
+    p.addFunction("floor", [](T a){ return std::floor(a); });
+    p.addFunction("pow", [](T a, T b){ return std::pow(a, b); });
+    p.addFunction("atan2", [](T a, T b){ return std::atan2(a, b); });
+    p.addFunction("sum", [](T a, T b){ return a + b; });
+    p.addFunction("diff", [](T a, T b){ return a - b; });
+    p.addFunction("sum", [](T a, T b, T c){ return a + b + c; });
+    p.addFunction("_sum", [](T a, T b, T c, T d){ return a + b + c + d; });
+    p.addFunction("a_sum", [](T a, T b, T c, T d){ return a-b+c-d; });
+
+    p.addConstant("PI", 3.14159265);
+    p.addConstant("e", 2.7);
+    p.addConstant("phi", 0.618);
+    p.addConstant("PHI", 1.618);
+    p.addConstant("root2", std::sqrt(2.));
+    p.addConstant("root3", std::sqrt(3.));
+    // test name-clash between function and constant identifiers
+    p.addConstant("atan2", 23.);
+    p.addConstant("sum", 42.);
+
+    testBigRandomExpressionsImpl<T>(p);
+}
+
 template <typename T>
 void SyntakTestMath::testBigRandomExpressionsImpl(MathParser<T> p)
 {
@@ -466,6 +499,7 @@ void SyntakTestMath::testBigRandomExpressionsImpl(MathParser<T> p)
         QTime time;
         time.start();
         size_t numNodesSum = 0, maxNumNodes = 0;
+        double lengthNodeFactor = 0.;
         QString heavyString;
         for (auto& exp : exps)
         {
@@ -474,6 +508,9 @@ void SyntakTestMath::testBigRandomExpressionsImpl(MathParser<T> p)
             if (p.parser().numNodesVisited() > maxNumNodes)
                 maxNumNodes = p.parser().numNodesVisited(),
                 heavyString = p.parser().text();
+            double fac = double(p.parser().numNodesVisited())
+                            / exp.size();
+            lengthNodeFactor += fac;
     #if 0
             PRINT(p.parser().numNodesVisited() << " nodes in '"
                   << p.parser().text().left(20) << "...' = " \
@@ -483,7 +520,10 @@ void SyntakTestMath::testBigRandomExpressionsImpl(MathParser<T> p)
     #endif
         }
         int e = time.elapsed();
+        lengthNodeFactor /= exps.size();
+
         PRINT(size_t(numNodesSum / (0.001*e)) << " nodes per second");
+        PRINT("average length-to-nodes factor: " << lengthNodeFactor);
         PRINT("max number nodes: " << maxNumNodes << " in string of length "
               << heavyString.size() << ":");
         PRINT(heavyString.left(60) << "...");
