@@ -62,11 +62,6 @@ public:
     /** Returns the complete parse tree for the given text */
     ParsedNode* parse(const QString& text);
 
-    /** Reduces the parse tree in @p root to a syntax tree,
-        e.g. it reduces each node to the deepest leave node
-        if possible. */
-    ParsedNode* reduceTree(const ParsedNode* root);
-
     static Parser createYabnfParser();
 
 private:
@@ -108,6 +103,11 @@ public:
     QString toString() const;
     QString toBracketString(bool withContent=false,
                             bool withLineBeaks = false) const;
+
+    /** Reduces the parse tree to a syntax tree,
+        e.g. it reduces each node to the deepest leave node
+        if possible. */
+    ParsedNode* reducedTree() const;
 
 private:
     friend class Parser;

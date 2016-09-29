@@ -182,7 +182,7 @@ public:
         delete rootNode;
         rootNode = parser.parse(text);
         //PRINT("\n" << rootNode->toBracketString(true));
-        auto reduced = parser.reduceTree(rootNode);
+        auto reduced = rootNode->reducedTree();
         PRINT("\n" << reduced->toBracketString());
         delete reduced;
         //printNodes();

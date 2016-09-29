@@ -53,9 +53,10 @@ private:
 class Token
 {
 public:
-    Token() { }
+    Token() : p_id(0) { }
     Token(const QString& name, const QString& fixedString)
-        : p_name    (name)
+        : p_id      (0)
+        , p_name    (name)
         , p_fixed   (fixedString)
     { }
     Token(const QString& name, const QRegExp& regexp)
@@ -66,6 +67,7 @@ public:
             p_regexp.setPattern("^(" + p_regexp.pattern() + ")");
     }
 
+    int id() const { return p_id; }
     const QString& name() const { return p_name; }
     const QString& fixedString() const { return p_fixed; }
 
@@ -76,6 +78,8 @@ public:
     QString tokenString() const
         { return p_regexp.isEmpty() ? p_fixed : p_regexp.pattern(); }
 private:
+    friend class Tokens;
+    int p_id;
     QString p_name, p_fixed;
     QRegExp p_regexp;
 };
@@ -84,22 +88,26 @@ private:
 /** A terminal symbol that was matched in the source text */
 class ParsedToken
 {
-public:
-    ParsedToken() { }
     ParsedToken(const QString& name, const QString& value,
-                SourcePos pos)
-        : p_name    (name)
+                SourcePos pos, int id)
+        : p_id      (id)
+        , p_name    (name)
         , p_value   (value)
         , p_pos     (pos)
     { }
+public:
+    ParsedToken() : p_id(-1) { }
 
-    bool isValid() const { return !p_name.isEmpty(); }
+    bool isValid() const { return p_id >= 0; }
+    int id() const { return p_id; }
     const QString& name() const { return p_name; }
     const QString& value() const { return p_value; }
     const SourcePos& pos() const { return p_pos; }
 
 private:
+    friend class Tokenizer;
     friend class Parser;
+    int p_id;
     QString p_name, p_value;
     SourcePos p_pos;
 };
@@ -109,16 +117,11 @@ private:
 class Tokens
 {
 public:
+    Tokens();
 
-    Tokens& add(const Token& t)
-    {
-        //p_tokens.insert(std::make_pair(t.name(), t));
-        p_tokens.push_back(t);
-        return *this;
-    }
+    Tokens& add(const Token& t);
 
-    Tokens& operator << (const Token& t)
-        { return add(t); }
+    Tokens& operator << (const Token& t) { return add(t); }
 
     const std::vector<Token>& tokens() const { return p_tokens; }
 

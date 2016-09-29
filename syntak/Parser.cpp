@@ -150,6 +150,35 @@ void ParsedNode::p_add(const std::vector<ParsedNode*>& nodes)
         p_add(n);
 }
 
+namespace {
+
+    const ParsedNode* findLeaveNode_(const ParsedNode* n)
+    {
+        if (n->isLeave() || n->children().size() > 1)
+            return n;
+        return findLeaveNode_(n->children()[0]);
+    }
+
+} // namespace
+
+ParsedNode* ParsedNode::reducedTree() const
+{
+    auto newParent = new ParsedNode(*this);
+    newParent->p_children.clear();
+
+    for (auto c : children())
+    {
+        ParsedNode* newNode;
+        auto l = findLeaveNode_(c);
+        if (l != c)
+            newNode = l->reducedTree();
+        else
+            newNode = c->reducedTree();
+        newParent->p_add(newNode);
+    }
+    return newParent;
+}
+
 
 // ####################### Parser ##############################
 
@@ -183,6 +212,9 @@ struct Parser::Private
     bool parseRuleToken(ParsedNode* node);
     bool parseRuleAnd(ParsedNode* node);
     bool parseRuleOr(ParsedNode* node);
+    bool parseRuleOrFirst(ParsedNode* node);
+
+    bool ruleApplicable(Rule*);
 
     void emitNodes(ParsedNode* root);
 
@@ -308,9 +340,37 @@ size_t Parser::Private::lengthSince(size_t oldPos) const
     return curPos - oldPos;
 }
 
+bool Parser::Private::ruleApplicable(Rule* r)
+{
+    // ohne:            3.7m nps, 46k nodes
+    // full:            2.7m nps, 25k nodes
+    // token-only:      2.9m nps, 28k nodes
+    // token-only(id):  3.0m nps, 28k nodes
+    if (r->type() == Rule::T_TOKEN
+     && r->id() != curToken().id())
+        return false;
+
+    return true;
+
+    if (r->type() == Rule::T_AND
+     && !r->subRules()[0].isOptional
+     && !ruleApplicable(r->subRules()[0].rule))
+        return false;
+
+    if (r->type() == Rule::T_OR)
+    {
+        for (const Rule::SubRule& sr : r->subRules())
+            if (ruleApplicable(sr.rule))
+                return true;
+        return false;
+    }
+
+    return true;
+}
+
 bool Parser::Private::parseRule(ParsedNode* node)
 {
-    if (!curToken().isValid() || curToken().name() == "EOF")
+    if (!curToken().isValid())// || curToken().name() == "EOF")
         return false;
 
     //if (!node->rule()->wants(curToken().name()))
@@ -346,7 +406,7 @@ bool Parser::Private::parseRule(ParsedNode* node)
 }
 
 
-bool Parser::Private::parseRuleToken(ParsedNode* node)
+inline bool Parser::Private::parseRuleToken(ParsedNode* node)
 {
     if (curToken().name() != node->rule()->name())
     {
@@ -364,6 +424,15 @@ bool Parser::Private::parseRuleAnd(ParsedNode* node)
     for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
     {
         const Rule::SubRule& sub = node->rule()->subRules()[idx];
+
+        // early out
+        if (!sub.isOptional && !ruleApplicable(sub.rule))
+        {
+            setPos(backup);
+            for (auto s : subNodes)
+                delete s;
+            return false;
+        }
 
         auto subnode = new ParsedNode();
         subNodes.push_back(subnode);
@@ -418,15 +487,22 @@ bool Parser::Private::parseRuleAnd(ParsedNode* node)
     return true;
 }
 
-#if 0
+
 bool Parser::Private::parseRuleOr(ParsedNode* node)
 {
+    if (node->rule()->orType() == Rule::OR_FIRST)
+        return parseRuleOrFirst(node);
+
     std::vector<ParsedNode*> subNodes;
 
     auto pos = p_lookPos;
     for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
     {
         const Rule::SubRule& sub = node->rule()->subRules()[idx];
+
+        // early out
+        if (!ruleApplicable(sub.rule))
+            continue;
 
         setPos(pos);
 
@@ -454,33 +530,67 @@ bool Parser::Private::parseRuleOr(ParsedNode* node)
 
     if (subNodes.size() == 1)
     {
-        //P_DEBUG("one resulting OR node "
-        //        << subNodes.front()->toString());
+        SYNTAK_DEBUG("one matched OR node "
+                     << subNodes.front()->toString());
         node->p_add(subNodes.front());
         setPos(subNodes.front()->p_nextTokenPos);
         return true;
     }
 
     // find most "relevant"
-    ParsedNode* rel = 0;
-    int maxCh = -1, maxLen = -1;
-    for (auto s : subNodes)
+    ParsedNode* rel = subNodes.front();
+
+    switch (node->rule()->orType())
     {
-        if (rel == nullptr)
+        // This code should never execute
+        case Rule::OR_FIRST: rel = subNodes.front(); break;
+
+        case Rule::OR_LONGEST:
         {
-            rel = s;
-            break;
+            for (size_t i=1; i<subNodes.size(); ++i)
+            {
+                if (subNodes[i]->length() > rel->length())
+                    rel = subNodes[i];
+            }
         }
-        int len = s->length();
-        if (len > maxLen)
-            rel = s, maxLen = len;
-        else
+        break;
+
+        case Rule::OR_SHORTEST:
         {
-            int ch = s->numChildLevels();
-            if (ch > maxCh)
-                rel = s, maxCh = ch;
+            for (size_t i=1; i<subNodes.size(); ++i)
+            {
+                if (subNodes[i]->length() < rel->length())
+                    rel = subNodes[i];
+            }
         }
+        break;
+
+        case Rule::OR_DEEPEST:
+        {
+            int maxLevel = rel->numChildLevels();
+            for (size_t i=1; i<subNodes.size(); ++i)
+            {
+                int l = subNodes[i]->numChildLevels();
+                if (l > maxLevel)
+                    maxLevel = l, rel = subNodes[i];
+            }
+        }
+        break;
+
+        case Rule::OR_SHALLOWEST:
+        {
+            int minLevel = rel->numChildLevels();
+            for (size_t i=1; i<subNodes.size(); ++i)
+            {
+                int l = subNodes[i]->numChildLevels();
+                if (l < minLevel)
+                    minLevel = l, rel = subNodes[i];
+            }
+        }
+        break;
+
     }
+
     for (auto s : subNodes)
     if (s != rel)
     {
@@ -492,13 +602,17 @@ bool Parser::Private::parseRuleOr(ParsedNode* node)
     setPos(rel->p_nextTokenPos);
     return true;
 }
-#else
-bool Parser::Private::parseRuleOr(ParsedNode* node)
+
+bool Parser::Private::parseRuleOrFirst(ParsedNode* node)
 {
     auto pos = p_lookPos;
     for (int idx=0; idx<node->rule()->subRules().size(); ++idx)
     {
         const Rule::SubRule& sub = node->rule()->subRules()[idx];
+
+        // early out
+        if (!ruleApplicable(sub.rule))
+            continue;
 
         setPos(pos);
 
@@ -522,7 +636,7 @@ bool Parser::Private::parseRuleOr(ParsedNode* node)
     setPos(pos);
     return false;
 }
-#endif
+
 
 void Parser::Private::emitNodes(ParsedNode* node)
 {
@@ -557,29 +671,5 @@ void Parser::Private::emitNodes(ParsedNode* node)
 }
 
 
-const ParsedNode* Parser::Private::findLeaveNode(const ParsedNode* n)
-{
-    if (n->isLeave() || n->children().size() > 1)
-        return n;
-    return findLeaveNode(n->children()[0]);
-}
-
-ParsedNode* Parser::reduceTree(const ParsedNode* n)
-{
-    auto newParent = new ParsedNode(*n);
-    newParent->p_children.clear();
-
-    for (auto c : n->children())
-    {
-        ParsedNode* newNode;
-        auto l = p_->findLeaveNode(c);
-        if (l != c)
-            newNode = reduceTree(l);
-        else
-            newNode = reduceTree(c);
-        newParent->p_add(newNode);
-    }
-    return newParent;
-}
 
 } // namespace Syntak

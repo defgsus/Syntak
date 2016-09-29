@@ -63,6 +63,20 @@ bool Token::isMatch(const QString& s, int* pos) const
 }
 
 
+Tokens::Tokens()
+{
+    p_tokens.push_back(Token("EOF", ""));
+}
+
+
+Tokens& Tokens::add(const Token& t)
+{
+    p_tokens.push_back(t);
+    p_tokens.back().p_id = p_tokens.size();
+    return *this;
+}
+
+
 
 void Tokenizer::tokenize(const QString& input)
 {
@@ -93,8 +107,10 @@ void Tokenizer::tokenize(const QString& input)
         if (best)
         {
             p_parsedTokens.push_back(
-                ParsedToken(best->name(), value,
-                            SourcePos(srcPos, srcLine)) );
+                ParsedToken(best->name(),
+                            value,
+                            SourcePos(srcPos, srcLine),
+                            best->id()) );
             while (i+1 < mp && i+1 < input.size())
             {
                 ++i;
@@ -106,7 +122,7 @@ void Tokenizer::tokenize(const QString& input)
     }
 
     p_parsedTokens.push_back(
-        ParsedToken("EOF", "", SourcePos(srcPos, srcLine)) );
+        ParsedToken("EOF", "", SourcePos(srcPos, srcLine), 0) );
 }
 
 QString Tokenizer::toString() const

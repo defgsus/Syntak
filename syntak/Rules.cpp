@@ -122,6 +122,12 @@ QString Rule::toDefinitionString() const
 }
 
 
+
+
+// ########################## Rules ##############################
+
+
+
 Rule::SubRule Rules::makeSubRule(const QString& s)
 {
     Rule::SubRule r;
@@ -163,15 +169,108 @@ Rule* Rules::createOr(const QString& name,
     return r;
 }
 
+Rule* Rules::createOr(const QString& name, Rule::OrType orType,
+                      const QStringList& rules)
+{
+    auto r = createAnd(name, rules);
+    r->p_type = Rule::T_OR;
+    r->p_orType = orType;
+    return r;
+}
+
 Rule* Rules::createToken(const Token& t)
 {
     auto r = new Rule();
+    r->p_id = t.id();
     r->p_name = t.name();
     r->p_type = Rule::T_TOKEN;
     r->p_token = t;
     p_add(r);
     return r;
 }
+
+
+Rule* Rules::createAnd(const QString& name, const QString& sym1)
+{
+    return createAnd(name, QStringList() << sym1);
+}
+
+Rule* Rules::createAnd(const QString& name,
+                       const QString& sym1, const QString& sym2)
+{
+    return createAnd(name, QStringList() << sym1 << sym2);
+}
+
+Rule* Rules::createAnd(const QString& name, const QString& sym1,
+                       const QString& sym2,const QString& sym3)
+{
+    return createAnd(name, QStringList() << sym1 << sym2 << sym3);
+}
+
+Rule* Rules::createAnd(const QString& name, const QString& sym1,
+                       const QString& sym2,const QString& sym3,
+                       const QString& sym4)
+{
+    return createAnd(name, QStringList()
+                       << sym1 << sym2 << sym3 << sym4);
+}
+
+
+Rule* Rules::createOr(const QString& name, const QString& sym1)
+{
+    return createOr(name, QStringList() << sym1);
+}
+
+Rule* Rules::createOr(const QString& name,
+                       const QString& sym1, const QString& sym2)
+{
+    return createOr(name, QStringList() << sym1 << sym2);
+}
+
+Rule* Rules::createOr(const QString& name, const QString& sym1,
+                       const QString& sym2,const QString& sym3)
+{
+    return createOr(name, QStringList() << sym1 << sym2 << sym3);
+}
+
+Rule* Rules::createOr(const QString& name, const QString& sym1,
+                       const QString& sym2,const QString& sym3,
+                       const QString& sym4)
+{
+    return createOr(name, QStringList()
+                       << sym1 << sym2 << sym3 << sym4);
+}
+
+
+Rule* Rules::createOr(const QString& name, Rule::OrType orType,
+                      const QString& sym1)
+{
+    return createOr(name, orType, QStringList() << sym1);
+}
+
+Rule* Rules::createOr(const QString& name,
+                      Rule::OrType orType,
+                      const QString& sym1, const QString& sym2)
+{
+    return createOr(name, orType, QStringList() << sym1 << sym2);
+}
+
+Rule* Rules::createOr(const QString& name, Rule::OrType orType,
+                      const QString& sym1, const QString& sym2,
+                      const QString& sym3)
+{
+    return createOr(name, orType, QStringList() << sym1 << sym2 << sym3);
+}
+
+Rule* Rules::createOr(const QString& name, Rule::OrType orType,
+                      const QString& sym1, const QString& sym2,
+                      const QString& sym3, const QString& sym4)
+{
+    return createOr(name, orType, QStringList()
+                       << sym1 << sym2 << sym3 << sym4);
+}
+
+
 
 void Rules::addTokens(const Tokens& tok)
 {

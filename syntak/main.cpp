@@ -70,7 +70,7 @@ void yabnf()
             ;
 
     auto node = p.parse(s);
-    PRINT(p.reduceTree(node)->toBracketString(true, true));
+    PRINT(node->reducedTree()->toBracketString(true, true));
 }
 
 
@@ -104,6 +104,66 @@ void math()
     PRINT("'" << p.expression() << "' = " << res);
 }
 
+template <typename T>
+void funcConst()
+{
+    using namespace Syntak;
+
+    MathParser<T> p;
+    p.addFunction("sin", [](T a){ return std::sin(a); });
+    p.addConstant("sin", 3.);
+
+    T res = p.evaluate("sin(1.)");
+
+    PRINT("'" << p.expression() << "' = " << res);
+}
+
+
+void power()
+{
+    using namespace Syntak;
+
+    Tokens tok;
+    tok << Token("num", QRegExp("[0-9]+"))
+        << Token("pow", "^")
+        << Token("plus", "+")
+        << Token("minus", "-")
+        << Token("mul", "*")
+        << Token("div", "/")
+        << Token("bopen", "(")
+        << Token("bclose", ")")
+           ;
+
+    Rules rules;
+    rules.addTokens(tok);
+
+    rules.createAnd("Expression",   "expr");
+
+    rules.createOr( "op1",          "plus" , "minus");
+    rules.createOr( "op2",          "mul" , "div");
+    rules.createAnd("op1_term",     "op1" , "term");
+    rules.createAnd("op2_factor",   "op2" , "factor");
+    rules.createAnd("op3_factor",   "pow" , "factor");
+    rules.createAnd("expr",         "term" , "[op1_term]*");
+    rules.createAnd("term",         "factor" , "[op2_factor]*");
+    rules.createOr ("factor",       "num", "quoted_expr");
+    rules.createAnd("quoted_expr",  "bopen" , "expr" , "bclose");
+
+
+    rules.connect("factor", 0, [](const ParsedNode*){});
+    rules.connect("op1_term", [](const ParsedNode*){});
+    rules.connect("op2_factor", [](const ParsedNode*){});
+    rules.connect("op3_factor", [](const ParsedNode*){});
+
+    Parser p;
+    p.setTokens(tok);
+    p.setRules(rules);
+
+    auto node = p.parse("2+(3+(4+5))");
+    PRINT(node->reducedTree()->toBracketString(true, true));
+    PRINT(p.numNodesVisited());
+}
+
 
 int main(int, char**)
 {
@@ -111,7 +171,9 @@ int main(int, char**)
     {
         //simple();
         //yabnf();
-        math<float>();
+        //math<float>();
+        //power();
+        funcConst<double>();
         //PRINT(bugString.count("(") << " " << bugString.count(")"));
 
         /*

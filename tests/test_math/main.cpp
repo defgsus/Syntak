@@ -74,21 +74,17 @@ public:
 
     template <typename T>
     static QString randomExpression(
-            bool asFloat,
             int minRecurseLevel, int maxRecurseLevel,
             const MathParser<T>& p);
     template <typename T>
     static QString randomTerm(
-            int recursionLevel, bool asFloat,
-            const MathParser<T>& p);
+            int recursionLevel, const MathParser<T>& p);
     template <typename T>
     static QString randomFactor(
-            int recursionLevel, bool asFloat,
-            const MathParser<T>& p);
+            int recursionLevel, const MathParser<T>& p);
 
     template <typename T>
     void testBigRandomExpressionsImpl(
-            bool asFloat,
             MathParser<T> p = MathParser<T>());
 
 private slots:
@@ -96,28 +92,31 @@ private slots:
     void testUInt();
     void testInt();
     void testDouble();
+    void testConstants();
     void testFunctions();
-    void testBigRandomExpressionsUInt();
-    void testBigRandomExpressionsInt();
-    void testBigRandomExpressionsDouble();
-    void testBigRandomExpressionsDoubleFuncs();
+    void testFunctionsAndConstants();
+    void testBigRandomUInt();
+    void testBigRandomInt();
+    void testBigRandomDouble();
+    void testBigRandomDoubleConstants();
+    void testBigRandomDoubleFuncs();
     void testAdvanced();
 };
 
 template <typename T>
-QString SyntakTestMath::randomExpression(bool asFloat,
+QString SyntakTestMath::randomExpression(
         int minLevel, int maxLevel, const MathParser<T>& p)
 {
-    return randomTerm(minLevel + (rand()%maxLevel), asFloat, p);
+    return randomTerm(minLevel + (rand()%maxLevel), p);
 }
 
 template <typename T>
 QString SyntakTestMath::randomTerm(
-        int recursionLevel, bool asFloat, const MathParser<T>& p)
+        int recursionLevel, const MathParser<T>& p)
 {
     if (!p.hasFunctions() || rand()%10 < 6)
     {
-        QString s = randomFactor(recursionLevel, asFloat, p);
+        QString s = randomFactor(recursionLevel, p);
         for (int i=0; i<rand()%5; ++i)
         {
             switch (rand()%4)
@@ -127,7 +126,7 @@ QString SyntakTestMath::randomTerm(
                 case 2: s += "*"; break;
                 case 3: s += "/"; break;
             }
-            s += randomFactor(recursionLevel, asFloat, p);
+            s += randomFactor(recursionLevel, p);
         }
         return s;
     }
@@ -136,11 +135,11 @@ QString SyntakTestMath::randomTerm(
         int count = 1 + rand()%4;
         QStringList funcs = p.getFunctionNames(count);
         if (funcs.isEmpty())
-            return randomFactor(recursionLevel, asFloat, p);
+            return randomFactor(recursionLevel, p);
         QString s = funcs[rand()%funcs.size()];
-        s += "(" + randomFactor(recursionLevel, asFloat, p);
+        s += "(" + randomFactor(recursionLevel, p);
         for (int i=1; i < count; ++i)
-            s += "," + randomFactor(recursionLevel, asFloat, p);
+            s += "," + randomFactor(recursionLevel, p);
         s += ")";
         return s;
     }
@@ -148,15 +147,20 @@ QString SyntakTestMath::randomTerm(
 
 template <typename T>
 QString SyntakTestMath::randomFactor(
-        int recursionLevel, bool asFloat, const MathParser<T>& p)
+        int recursionLevel, const MathParser<T>& p)
 {
     if (recursionLevel < 1 || rand() % 10 == 0)
     {
+        if (!p.constants().isEmpty() && rand() % 6 == 0)
+        {
+            auto keys = p.constants().keys();
+            return keys[rand()%keys.size()];
+        }
         QString s = QString("%1").arg(rand()%1000);
-        if (!asFloat)
-            return s;
-        if (rand()%8 == 0)
+        if (p.isSigned() && rand()%8 == 0)
             s.prepend("-");
+        if (!p.isFloat())
+            return s;
         if (rand()%2 == 0)
             s += QString(".%1").arg(rand()%1000000);
         if (rand()%10 == 0)
@@ -165,7 +169,7 @@ QString SyntakTestMath::randomFactor(
                     .arg(1 + rand()%20);
         return s;
     }
-    return "(" + randomTerm(rand()%recursionLevel, asFloat, p) + ")";
+    return "(" + randomTerm(rand()%recursionLevel, p) + ")";
 }
 
 
@@ -304,6 +308,46 @@ void SyntakTestMath::testDouble()
 #undef SYNTAK__COMP_VAR
 }
 
+void SyntakTestMath::testConstants()
+{
+    typedef double T;
+#define SYNTAK__COMP(expr__) \
+    { double res = p.evaluate(#expr__); \
+      PRINT(p.parser().numNodesVisited() << " nodes in " \
+            << p.parser().text() << " = " << res); \
+      QCOMPARE(res, double(expr__)); }
+
+    const T PI = 3.14;
+    const T E = 2.7;
+    const T PHI = 1.618;
+    const T UNKNOWN = 0;
+
+    MathParser<double> p;
+    p.addConstant("PI",     PI);
+    p.addConstant("E",      E);
+    p.addConstant("PHI",    PHI);
+
+    SYNTAK__COMP( PI );
+    SYNTAK__COMP( -PI );
+    SYNTAK__COMP( - PI );
+    SYNTAK__COMP( 2*E );
+    SYNTAK__COMP( PHI*4 );
+    SYNTAK__COMP( PI/PHI );
+    SYNTAK__COMP( -PI / -PHI );
+    try
+    {
+        SYNTAK__COMP( PI * UNKNOWN );
+        QFAIL("No error for unknown identifier generated");
+    }
+    catch (SyntakException e)
+    {
+        PRINT(e.text());
+    }
+
+#undef SYNTAK__COMP
+#undef SYNTAK__COMP_VAR
+}
+
 void SyntakTestMath::testFunctions()
 {
     typedef double T;
@@ -330,23 +374,61 @@ void SyntakTestMath::testFunctions()
 #undef SYNTAK__COMP_VAR
 }
 
-
-void SyntakTestMath::testBigRandomExpressionsUInt()
+void SyntakTestMath::testFunctionsAndConstants()
 {
-    testBigRandomExpressionsImpl<uint64_t>(false);
+    typedef double T;
+#define SYNTAK__COMP(expr__, cexpr__) \
+    { T res = p.evaluate(#expr__); \
+      PRINT(p.parser().numNodesVisited() << " nodes in " \
+            << p.parser().text() << " = " << res); \
+      QCOMPARE(res, T(cexpr__)); }
+
+    const T sin = 3.14;
+
+    MathParser<double> p;
+    p.addFunction("sin", [](T a){ return std::sin(a); });
+    p.addConstant("sin", sin);
+
+    SYNTAK__COMP( sin,              sin );
+    SYNTAK__COMP( sin(1.),          std::sin(1.) );
+    SYNTAK__COMP( sin * sin(1.),    sin * std::sin(1.) );
+    SYNTAK__COMP( sin(sin),         std::sin(sin) );
+
+#undef SYNTAK__COMP
+#undef SYNTAK__COMP_VAR
 }
 
-void SyntakTestMath::testBigRandomExpressionsInt()
+
+void SyntakTestMath::testBigRandomUInt()
 {
-    testBigRandomExpressionsImpl<int64_t>(false);
+    testBigRandomExpressionsImpl<uint64_t>();
 }
 
-void SyntakTestMath::testBigRandomExpressionsDouble()
+void SyntakTestMath::testBigRandomInt()
 {
-    testBigRandomExpressionsImpl<double>(true);
+    testBigRandomExpressionsImpl<int64_t>();
 }
 
-void SyntakTestMath::testBigRandomExpressionsDoubleFuncs()
+void SyntakTestMath::testBigRandomDouble()
+{
+    testBigRandomExpressionsImpl<double>();
+}
+
+void SyntakTestMath::testBigRandomDoubleConstants()
+{
+    typedef double T;
+    MathParser<T> p;
+    p.addConstant("PI", 3.14159265);
+    p.addConstant("e", 2.7);
+    p.addConstant("phi", 0.618);
+    p.addConstant("PHI", 1.618);
+    p.addConstant("root2", std::sqrt(2.));
+    p.addConstant("root3", std::sqrt(3.));
+
+    testBigRandomExpressionsImpl<T>(p);
+}
+
+void SyntakTestMath::testBigRandomDoubleFuncs()
 {
     typedef double T;
     MathParser<T> p;
@@ -358,15 +440,14 @@ void SyntakTestMath::testBigRandomExpressionsDoubleFuncs()
     p.addFunction("sum", [](T a, T b){ return a + b; });
     p.addFunction("diff", [](T a, T b){ return a - b; });
     p.addFunction("sum", [](T a, T b, T c){ return a + b + c; });
-    p.addFunction("sum", [](T a, T b, T c, T d){ return a + b + c + d; });
-    p.addFunction("a_sum", [](T a, T b, T c, T d){ return a - b + c - d; });
+    p.addFunction("_sum", [](T a, T b, T c, T d){ return a + b + c + d; });
+    p.addFunction("a_sum", [](T a, T b, T c, T d){ return a-b+c-d; });
 
-    testBigRandomExpressionsImpl<T>(true, p);
+    testBigRandomExpressionsImpl<T>(p);
 }
 
 template <typename T>
-void SyntakTestMath::testBigRandomExpressionsImpl(
-        bool asFloat, MathParser<T> p)
+void SyntakTestMath::testBigRandomExpressionsImpl(MathParser<T> p)
 {
     try
     {
@@ -377,8 +458,8 @@ void SyntakTestMath::testBigRandomExpressionsImpl(
         */
 
         QStringList exps;
-        for (int i=0; i<100; ++i)
-            exps << randomExpression(asFloat, 10, 50, p);
+        for (int i=0; i<200; ++i)
+            exps << randomExpression(10, 50, p);
 
         p.setIgnoreDivisionByZero(true);
 

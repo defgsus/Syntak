@@ -43,7 +43,7 @@ class ParsedNode;
 /** A whole or piece of a production */
 class Rule
 {
-    Rule() : p_isTop(false) { }
+    Rule() : p_id(-1), p_isTop(false), p_orType(OR_FIRST) { }
     Rule(const Rule&) = delete;
     void operator=(const Rule&) = delete;
 
@@ -57,6 +57,23 @@ public:
         T_OR
     };
 
+    /** Defines which node to pick in an OR-rule.
+        All types except OR_FIRST evaluate all OR-branches
+        in parallel! */
+    enum OrType
+    {
+        /** The first matching subrule is picked */
+        OR_FIRST,
+        /** The subrule that captures the most source is picked */
+        OR_LONGEST,
+        /** The subrule that captures the fewest source is picked */
+        OR_SHORTEST,
+        /** The subrule that expands deepest is picked */
+        OR_DEEPEST,
+        /** The subrule that expands the less is picked */
+        OR_SHALLOWEST
+    };
+
     struct SubRule
     {
         Rule* rule;
@@ -68,9 +85,15 @@ public:
 
     Type type() const { return p_type; }
     const QString& name() const { return p_name; }
-    const Token& token() const { return p_token; }
     bool isTop() const { return p_isTop; }
     bool isConnected() const;
+
+    // only valid for T_TOKEN
+    int id() const { return p_id; }
+    // only valid for T_TOKEN
+    const Token& token() const { return p_token; }
+    /** Only valid for T_OR. @see OrType */
+    OrType orType() const { return p_orType; }
 
     const QList<SubRule>& subRules() const { return p_subRules; }
     bool contains(const QString& name) const;
@@ -90,12 +113,14 @@ public:
 private:
     friend class Rules;
     friend class Parser;
+    int p_id;
     QString p_name;
     Type p_type;
     Token p_token;
     QList<SubRule> p_subRules;
     Callback p_func;
     bool p_isTop;
+    OrType p_orType;
 };
 
 
@@ -119,33 +144,37 @@ public:
     Rule* createAnd(const QString& name, const QStringList& symbols);
 
     Rule* createOr(const QString& name, const QStringList& symbols);
+    Rule* createOr(const QString& name, Rule::OrType orType,
+                   const QStringList& symbols);
 
-    Rule* createAnd(const QString& name, const QString& sym1)
-        { return createAnd(name, QStringList() << sym1); }
+    Rule* createAnd(const QString& name, const QString& sym1);
     Rule* createAnd(const QString& name,
-                   const QString& sym1, const QString& sym2)
-        { return createAnd(name, QStringList() << sym1 << sym2); }
+                    const QString& sym1, const QString& sym2);
     Rule* createAnd(const QString& name, const QString& sym1,
-                    const QString& sym2,const QString& sym3)
-        { return createAnd(name, QStringList() << sym1 << sym2 << sym3); }
+                    const QString& sym2,const QString& sym3);
     Rule* createAnd(const QString& name, const QString& sym1,
                     const QString& sym2,const QString& sym3,
-                    const QString& sym4)
-        { return createAnd(name, QStringList()
-                           << sym1 << sym2 << sym3 << sym4); }
-    Rule* createOr(const QString& name, const QString& sym1)
-    { return createOr(name, QStringList() << sym1); }
-    Rule* createOr(const QString& name,
-                   const QString& sym1, const QString& sym2)
-        { return createOr(name, QStringList() << sym1 << sym2); }
-    Rule* createOr(const QString& name, const QString& sym1,
-                    const QString& sym2,const QString& sym3)
-        { return createOr(name, QStringList() << sym1 << sym2 << sym3); }
-    Rule* createOr(const QString& name, const QString& sym1,
+                    const QString& sym4);
+
+    Rule* createOr (const QString& name, const QString& sym1);
+    Rule* createOr (const QString& name,
+                    const QString& sym1, const QString& sym2);
+    Rule* createOr (const QString& name, const QString& sym1,
+                    const QString& sym2,const QString& sym3);
+    Rule* createOr (const QString& name, const QString& sym1,
                     const QString& sym2,const QString& sym3,
-                    const QString& sym4)
-        { return createOr(name, QStringList()
-                           << sym1 << sym2 << sym3 << sym4); }
+                    const QString& sym4);
+
+    Rule* createOr (const QString& name, Rule::OrType orType,
+                    const QString& sym1);
+    Rule* createOr (const QString& name, Rule::OrType orType,
+                    const QString& sym1, const QString& sym2);
+    Rule* createOr (const QString& name, Rule::OrType orType,
+                    const QString& sym1, const QString& sym2,
+                    const QString& sym3);
+    Rule* createOr (const QString& name, Rule::OrType orType,
+                    const QString& sym1, const QString& sym2,
+                    const QString& sym3, const QString& sym4);
 
     void addTokens(const Tokens&);
 

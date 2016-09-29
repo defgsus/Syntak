@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 #include <functional>
 
 #include <QString>
+#include <QMap>
 
 namespace Syntak {
 
@@ -41,6 +42,11 @@ public:
     ~MathParser();
 
     MathParser& operator=(const MathParser&);
+
+    /** Is T a floating point type */
+    bool isFloat() const;
+    /** Is T a signed type */
+    bool isSigned() const;
 
     /** Optional initialization.
         Normally the first call to evaluate() will initialize
@@ -67,6 +73,9 @@ public:
 
     bool hasFunctions() const;
     QStringList getFunctionNames(size_t numArguments) const;
+
+    void addConstant(const QString& name, T value);
+    const QMap<QString, T>& constants() const;
 
 private:
     struct Private;

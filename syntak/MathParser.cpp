@@ -45,6 +45,7 @@ namespace {
     {
         typedef uint8_t T;
         static bool isSigned() { return false; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t) { return t.toUInt(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
         static T modulo(T a, T b) { return a % b; }
@@ -54,6 +55,7 @@ namespace {
     {
         typedef uint16_t T;
         static bool isSigned() { return false; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t) { return t.toUInt(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
         static T modulo(T a, T b) { return a % b; }
@@ -63,6 +65,7 @@ namespace {
     {
         typedef uint32_t T;
         static bool isSigned() { return false; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t) { return t.toUInt(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
         static T modulo(T a, T b) { return a % b; }
@@ -72,6 +75,7 @@ namespace {
     {
         typedef uint64_t T;
         static bool isSigned() { return false; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t)
             { return t.toULongLong(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
@@ -83,6 +87,7 @@ namespace {
     {
         typedef int8_t T;
         static bool isSigned() { return true; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t) { return t.toInt(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
         static T modulo(T a, T b) { return a % b; }
@@ -92,6 +97,7 @@ namespace {
     {
         typedef int16_t T;
         static bool isSigned() { return true; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t) { return t.toInt(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
         static T modulo(T a, T b) { return a % b; }
@@ -101,6 +107,7 @@ namespace {
     {
         typedef int32_t T;
         static bool isSigned() { return true; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t) { return t.toInt(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
         static T modulo(T a, T b) { return a % b; }
@@ -110,6 +117,7 @@ namespace {
     {
         typedef int64_t T;
         static bool isSigned() { return true; }
+        static bool isFloat() { return false; }
         static T toValue(const QString& t)
             { return t.toLongLong(); }
         static QRegExp numberRegex() { return QRegExp("[0-9]+"); }
@@ -121,6 +129,7 @@ namespace {
     {
         typedef float T;
         static bool isSigned() { return true; }
+        static bool isFloat() { return true; }
         static T toValue(const QString& t) { return t.toFloat(); }
         static QRegExp numberRegex() { return QRegExp(
                 "(\\d+(\\.\\d*)?|\\.\\d+)([eE][+-]?\\d+)?"); }
@@ -131,6 +140,7 @@ namespace {
     {
         typedef double T;
         static bool isSigned() { return true; }
+        static bool isFloat() { return true; }
         static T toValue(const QString& t) { return t.toDouble(); }
         static QRegExp numberRegex() { return QRegExp(
                 "(\\d+(\\.\\d*)?|\\.\\d+)([eE][+-]?\\d+)?"); }
@@ -166,7 +176,11 @@ struct MathParser<F>::Private
     void init();
     F takeLastValue();
     QString getFuncName(ParsedNode* n);
-    F getFuncValue(const QString& name, int numAgrs, const ParsedNode* n);
+    F getFuncValue(QString name, int numAgrs, const ParsedNode* n);
+
+    /** Returns true if functions and constant/variable
+        identifiers share a name */
+    bool hasIdentifierNameClash();
 
     F f_modulo(F p1, F p2, const ParsedNode* n);
     F f_divide(F p1, F p2, const ParsedNode* n);
@@ -176,10 +190,16 @@ struct MathParser<F>::Private
 
     bool needsReinit, ignoreZeroDiv;
 
-    QMap<QString, std::function<F(F)>> funcs1;
-    QMap<QString, std::function<F(F, F)>> funcs2;
-    QMap<QString, std::function<F(F, F, F)>> funcs3;
-    QMap<QString, std::function<F(F, F, F, F)>> funcs4;
+    struct Function
+    {
+        std::function<F(F)> func1;
+        std::function<F(F, F)> func2;
+        std::function<F(F, F, F)> func3;
+        std::function<F(F, F, F, F)> func4;
+    };
+
+    QMap<QString, Function> functions;
+    QMap<QString, F> constants;
 
     QList<Node> stack;
 };
@@ -214,6 +234,12 @@ MathParser<F>& MathParser<F>::operator =(const MathParser& o)
 }
 
 template <typename F>
+bool MathParser<F>::isSigned() const { return TypeTraits<F>::isSigned(); }
+
+template <typename F>
+bool MathParser<F>::isFloat() const { return TypeTraits<F>::isFloat(); }
+
+template <typename F>
 const Parser& MathParser<F>::parser() const { return p_->parser; }
 
 template <typename F>
@@ -230,61 +256,119 @@ template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F)> foo)
 {
-    p_->needsReinit |= p_->funcs1.isEmpty();
-    p_->funcs1.insert(n, foo);
+    if (!QRegExp("^[A-Za-z_][A-Za-z0-9_]*").exactMatch(n))
+        SYNTAK_ERROR("Function name '" << n << "' is not a "
+                     "valid identifier");
+
+    p_->needsReinit = true;
+    if (!p_->functions.contains(n))
+    {
+        typename Private::Function f;
+        f.func1 = foo;
+        p_->functions.insert(n, f);
+    }
+    else
+        p_->functions[n].func1 = foo;
 }
 
 template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F,F)> foo)
 {
-    p_->needsReinit |= p_->funcs2.isEmpty();
-    p_->funcs2.insert(n, foo);
+    if (!QRegExp("^[A-Za-z_][A-Za-z0-9_]*").exactMatch(n))
+        SYNTAK_ERROR("Function name '" << n << "' is not a "
+                     "valid identifier");
+
+    p_->needsReinit = true;
+    if (!p_->functions.contains(n))
+    {
+        typename Private::Function f;
+        f.func2 = foo;
+        p_->functions.insert(n, f);
+    }
+    else
+        p_->functions[n].func2 = foo;
 }
 
 template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F,F,F)> foo)
 {
-    p_->needsReinit |= p_->funcs3.isEmpty();
-    p_->funcs3.insert(n, foo);
+    if (!QRegExp("^[A-Za-z_][A-Za-z0-9_]*").exactMatch(n))
+        SYNTAK_ERROR("Function name '" << n << "' is not a "
+                     "valid identifier");
+
+    p_->needsReinit = true;
+    if (!p_->functions.contains(n))
+    {
+        typename Private::Function f;
+        f.func3 = foo;
+        p_->functions.insert(n, f);
+    }
+    else
+        p_->functions[n].func3 = foo;
 }
 
 template <typename F>
 void MathParser<F>::addFunction(
         const QString& n, std::function<F(F,F,F,F)> foo)
 {
-    p_->needsReinit |= p_->funcs4.isEmpty();
-    p_->funcs4.insert(n, foo);
+    if (!QRegExp("^[A-Za-z_][A-Za-z0-9_]*").exactMatch(n))
+        SYNTAK_ERROR("Function name '" << n << "' is not a "
+                     "valid identifier");
+
+    p_->needsReinit = true;
+    if (!p_->functions.contains(n))
+    {
+        typename Private::Function f;
+        f.func4 = foo;
+        p_->functions.insert(n, f);
+    }
+    else
+        p_->functions[n].func4 = foo;
 }
 
 template <typename F>
 bool MathParser<F>::hasFunctions() const
 {
-    return !p_->funcs1.isEmpty()
-        || !p_->funcs2.isEmpty()
-        || !p_->funcs3.isEmpty()
-        || !p_->funcs4.isEmpty();
+    return !p_->functions.isEmpty();
 }
 
 template <typename F>
 QStringList MathParser<F>::getFunctionNames(size_t numArguments) const
 {
     QStringList list;
-    switch (numArguments)
+    for (auto i=p_->functions.begin(); i!=p_->functions.end(); ++i)
     {
-        case 1: for (auto i=p_->funcs1.begin(); i!=p_->funcs1.end(); ++i)
-            list << i.key(); break;
-        case 2: for (auto i=p_->funcs2.begin(); i!=p_->funcs2.end(); ++i)
-            list << i.key(); break;
-        case 3: for (auto i=p_->funcs3.begin(); i!=p_->funcs3.end(); ++i)
-            list << i.key(); break;
-        case 4: for (auto i=p_->funcs4.begin(); i!=p_->funcs4.end(); ++i)
-            list << i.key(); break;
+        switch (numArguments)
+        {
+            case 1: if (i.value().func1) list << i.key(); break;
+            case 2: if (i.value().func2) list << i.key(); break;
+            case 3: if (i.value().func3) list << i.key(); break;
+            case 4: if (i.value().func4) list << i.key(); break;
+        }
     }
-
     return list;
 }
+
+template <typename F>
+void MathParser<F>::addConstant(const QString& n, F value)
+{
+    if (!QRegExp("^[A-Za-z_][A-Za-z0-9_]*").exactMatch(n))
+        SYNTAK_ERROR("Constant name '" << n << "' is not a "
+                     "valid identifier");
+
+    p_->needsReinit = true;
+    p_->constants.insert(n, value);
+}
+
+template <typename F>
+const QMap<QString, F>& MathParser<F>::constants() const
+{
+    return p_->constants;
+}
+
+
 
 template <typename F>
 void MathParser<F>::init()
@@ -293,6 +377,14 @@ void MathParser<F>::init()
     p_->needsReinit = false;
 }
 
+template <typename F>
+bool MathParser<F>::Private::hasIdentifierNameClash()
+{
+    for (auto i = constants.begin(); i!=constants.end(); ++i)
+        if (functions.contains(i.key()))
+            return true;
+    return false;
+}
 
 template <typename F>
 void MathParser<F>::Private::init()
@@ -301,10 +393,10 @@ void MathParser<F>::Private::init()
 
     const bool
             isSigned = TypeTraits<F>::isSigned(),
-            hasFuncs = !funcs1.isEmpty()
-                    || !funcs2.isEmpty()
-                    || !funcs3.isEmpty()
-                    || !funcs4.isEmpty();
+            hasConstants = !constants.isEmpty(),
+            hasFuncs = !functions.isEmpty();
+
+    // ----- setup terminal symbols -----
 
     lex << Token("plus", "+")
         << Token("minus", "-")
@@ -313,24 +405,31 @@ void MathParser<F>::Private::init()
         << Token("mod", "%")
         << Token("caret", "^")
         << Token("bopen", "(")
-        << Token("bclose", ")");
-    if (!isSigned)
-        lex << Token("num", TypeTraits<F>::numberRegex());
-    else
-        lex << Token("unsigned_num", TypeTraits<F>::numberRegex());
-    if (hasFuncs)
+        << Token("bclose", ")")
+        << Token(isSigned ? "unsigned_num"
+                          : "num", TypeTraits<F>::numberRegex())
+           ;
+
+    if (hasFuncs || hasConstants)
     {
         // function identifier
-        lex << Token("ident", QRegExp("[A-Za-z_][A-Za-z0-9_]*"));
+        lex << Token(isSigned ? "unsigned_ident"
+                              : "ident",
+                     QRegExp("[A-Za-z_][A-Za-z0-9_]*"));
+    }
+    if (hasFuncs)
+    {
         // comma for argument list
         lex << Token("comma", ",");
     }
+
+    // --------- create rules ----------
 
     Rules rules;
     rules.addTokens(lex);
 
     // top rule
-    rules.createAnd("expression",   "expr");
+    rules.createAnd("expression",   "expr", "EOF");
 
     rules.createOr( "op1",          "plus" , "minus");
     rules.createOr( "op2",          "mul" , "div", "mod");
@@ -347,6 +446,8 @@ void MathParser<F>::Private::init()
                                              "[caret_factor]*");
 #endif
     QStringList factorList; factorList << "num" << "quoted_expr";
+    if (hasConstants)
+        factorList << "ident";
     if (!isSigned)
     {
         rules.createAnd("quoted_expr",  "bopen" , "expr" , "bclose");
@@ -356,6 +457,8 @@ void MathParser<F>::Private::init()
         rules.createAnd("quoted_expr",  "[op1]", "bopen",
                                                  "expr" , "bclose");
         rules.createAnd("num",          "[op1]", "unsigned_num");
+        if (hasFuncs || hasConstants)
+            rules.createAnd("ident",    "[op1]", "unsigned_ident");
     }
     if (hasFuncs)
     {
@@ -367,7 +470,11 @@ void MathParser<F>::Private::init()
         factorList << "func";
     }
 
-    rules.createOr ("factor",           factorList);
+    Rule::OrType orType = Rule::OR_FIRST;
+    if (hasIdentifierNameClash())
+        orType = Rule::OR_DEEPEST;
+
+    rules.createOr ("factor", orType, factorList);
 
     rules.check();
 
@@ -377,6 +484,26 @@ void MathParser<F>::Private::init()
     rules.connect("factor", 0, [=](ParsedNode* n)
     {
         stack << n;
+    });
+
+    // ident in factor
+    if (hasConstants)
+    rules.connect("factor", 2, [=](ParsedNode* n)
+    {
+        int sign = 1;
+        QString name = n->text();
+        if (isSigned)
+        {
+            if (name.startsWith("-"))
+                sign = -1;
+            if (name.startsWith("+") || sign == -1)
+                name = name.remove(0,1).trimmed();
+        }
+        auto i = constants.find(name);
+        if (i == constants.end())
+            SYNTAK_ERROR("Unknown identifier " << name
+                         << " at " << n->pos().toString());
+        stack << Node(sign * i.value());
     });
 
     rules.connect("op1_term", [=](ParsedNode* n)
@@ -485,36 +612,48 @@ QString MathParser<F>::Private::getFuncName(ParsedNode* n)
 
 template <typename F>
 F MathParser<F>::Private::getFuncValue(
-        const QString& name, int num, const ParsedNode* n)
+        QString name, int num, const ParsedNode* n)
 {
-    if ((num == 1 && !funcs1.contains(name))
-     || (num == 2 && !funcs2.contains(name))
-     || (num == 3 && !funcs3.contains(name))
-     || (num == 4 && !funcs4.contains(name))
+    int sign = 1;
+    if (p->isSigned())
+    {
+        if (name.startsWith("-"))
+            sign = -1;
+        if (name.startsWith("+") || sign == -1)
+            name = name.remove(0,1).trimmed();
+    }
+    if (!functions.contains(name))
+        SYNTAK_ERROR("Unknown function '"
+                     << name << "' at " << n->pos().toString());
+    Function& func = functions[name];
+    if ((num == 1 && !func.func1)
+     || (num == 2 && !func.func2)
+     || (num == 3 && !func.func3)
+     || (num == 4 && !func.func4)
             )
         SYNTAK_ERROR("Unknown " << num << "-argument function '"
                      << name << "' at " << n->pos().toString());
     if (num == 1)
     {
         F p1 = takeLastValue();
-        return funcs1.value(name)(p1);
+        return sign * func.func1(p1);
     }
     else if (num == 2)
     {
         F p2 = takeLastValue(), p1 = takeLastValue();
-        return funcs2.value(name)(p1, p2);
+        return sign * func.func2(p1, p2);
     }
     else if (num == 3)
     {
         F p3 = takeLastValue(), p2 = takeLastValue(),
           p1 = takeLastValue();
-        return funcs3.value(name)(p1, p2, p3);
+        return sign * func.func3(p1, p2, p3);
     }
     else if (num == 4)
     {
         F p4 = takeLastValue(), p3 = takeLastValue(),
           p2 = takeLastValue(), p1 = takeLastValue();
-        return funcs4.value(name)(p1, p2, p3, p4);
+        return sign * func.func4(p1, p2, p3, p4);
     }
 
     SYNTAK_ERROR(num << "-argument functions not supported");
